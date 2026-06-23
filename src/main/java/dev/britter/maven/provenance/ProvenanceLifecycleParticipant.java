@@ -1,15 +1,20 @@
 package dev.britter.maven.provenance;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import dev.britter.maven.provenance.manifest.ManifestWriter;
 import dev.britter.maven.provenance.report.ReportWriter;
 import org.apache.maven.AbstractMavenLifecycleParticipant;
 import org.apache.maven.execution.MavenSession;
+import org.codehaus.plexus.PlexusContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,12 +36,15 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
     private static final Logger LOGGER = LoggerFactory.getLogger(ProvenanceLifecycleParticipant.class);
 
     private final ResolutionRecorder recorder;
+    private final PlexusContainer container;
     private final ProvenanceAnalyzer analyzer = new ProvenanceAnalyzer();
+    private final ManifestWriter manifestWriter = new ManifestWriter();
     private final ReportWriter reportWriter = new ReportWriter();
 
     @Inject
-    public ProvenanceLifecycleParticipant(ResolutionRecorder recorder) {
+    public ProvenanceLifecycleParticipant(ResolutionRecorder recorder, PlexusContainer container) {
         this.recorder = recorder;
+        this.container = container;
     }
 
     @Override
@@ -44,17 +52,25 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
         try {
             List<String> warnings = new ArrayList<>();
             List<PluginEvidence> evidence = analyzer.analyze(session);
-            List<String> observedArtifacts = recorder.distinctArtifacts().stream()
+            List<ResolvedArtifact> universe = recorder.distinctArtifacts();
+
+            Path localRepoBase = Paths.get(session.getLocalRepository().getBasedir());
+            Set<String> projectFiles =
+                    new ReactorInspector(container).collectProjectFiles(session, evidence, universe);
+            List<ResolvedArtifact> projectArtifacts =
+                    Classifier.projectArtifacts(universe, projectFiles);
+
+            ReportConfig config = ReportConfig.from(session);
+            manifestWriter.write(config.manifestPath(), projectArtifacts, localRepoBase);
+
+            List<String> observedArtifacts = universe.stream()
                     .map(ResolvedArtifact::coordinates)
                     .distinct()
                     .toList();
-
-            ReportConfig config = ReportConfig.from(session);
             reportWriter.write(config.reportPath(), evidence, observedArtifacts, warnings);
 
-            LOGGER.info("repo-provenance: wrote provenance report to {} ({} plugins/extensions, "
-                    + "{} artifacts observed)",
-                    config.reportPath(), evidence.size(), observedArtifacts.size());
+            LOGGER.info("repo-provenance: wrote manifest to {} ({} of {} observed artifacts are "
+                    + "PROJECT)", config.manifestPath(), projectArtifacts.size(), universe.size());
         } catch (Exception e) {
             // Never fail the build because of this observational extension.
             LOGGER.warn("repo-provenance: failed to produce outputs, build is unaffected", e);
