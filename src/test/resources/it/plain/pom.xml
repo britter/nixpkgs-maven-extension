@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>dev.britter.it</groupId>
+  <artifactId>plain</artifactId>
+  <version>1.0</version>
+  <!-- Plain jar: pins nothing and has no tests, so all default plugins (and their deep realm
+       closures) are IMPLICIT, and no surefire provider is triggered. -->
+  <packaging>jar</packaging>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>17</maven.compiler.release>
+  </properties>
+</project>
