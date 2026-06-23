@@ -1,0 +1,3 @@
+dev.britter.maven.provenance.ResolutionRecorder
+dev.britter.maven.provenance.ProvenanceEventSpy
+dev.britter.maven.provenance.ProvenanceLifecycleParticipant

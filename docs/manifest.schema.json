@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/britter/nixpkgs-maven-extension/blob/main/docs/manifest.schema.json",
+  "title": "Maven Local-Repository Provenance Manifest",
+  "description": "The PROJECT-determined set of artifacts written to the Maven local repository during a build, as produced by the provenance extension (see design.md). Everything written to the local repository that is NOT listed here is IMPLICIT by definition. This document must be canonical: projectArtifacts sorted by (groupId, artifactId, version, type, classifier), each entry's files sorted, UTF-8/LF, no timestamps or run-specific data, so that two builds of the same project on any Maven 3.9.x release produce byte-identical output.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "projectArtifacts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "Manifest schema version. Bump on any breaking change to this schema.",
+      "type": "string",
+      "const": "1"
+    },
+    "projectArtifacts": {
+      "description": "Sorted list of the PROJECT-determined artifacts. May be empty (a project whose entire footprint is Maven-implicit).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "groupId",
+        "artifactId",
+        "version",
+        "type",
+        "files"
+      ],
+      "properties": {
+        "groupId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifactId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "description": "The resolved version actually present in the local repository.",
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "description": "Artifact type / packaging (e.g. jar, pom, war). For a coordinate present only as a POM (e.g. a parent POM), use \"pom\".",
+          "type": "string",
+          "minLength": 1
+        },
+        "classifier": {
+          "description": "Optional artifact classifier (e.g. sources, javadoc). Omit when absent.",
+          "type": "string",
+          "minLength": 1
+        },
+        "files": {
+          "description": "Repository-relative POSIX paths of every file belonging to this artifact that is part of the PROJECT set (primary file, .pom, checksum sidecars). Sorted. No leading slash; forward slashes only.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[^/].*$"
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "schemaVersion": "1",
+      "projectArtifacts": [
+        {
+          "groupId": "org.example",
+          "artifactId": "lib",
+          "version": "1.2.3",
+          "type": "jar",
+          "files": [
+            "org/example/lib/1.2.3/lib-1.2.3.jar",
+            "org/example/lib/1.2.3/lib-1.2.3.jar.sha1",
+            "org/example/lib/1.2.3/lib-1.2.3.pom",
+            "org/example/lib/1.2.3/lib-1.2.3.pom.sha1"
+          ]
+        },
+        {
+          "groupId": "org.example",
+          "artifactId": "lib-parent",
+          "version": "1.0",
+          "type": "pom",
+          "files": [
+            "org/example/lib-parent/1.0/lib-parent-1.0.pom",
+            "org/example/lib-parent/1.0/lib-parent-1.0.pom.sha1"
+          ]
+        }
+      ]
+    }
+  ]
+}

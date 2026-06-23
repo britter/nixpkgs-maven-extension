@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  This is an observational core extension. It exports nothing to plugin realms: its components
+  only watch the build and write a manifest. Components are discovered via the JSR-330 Sisu index
+  (META-INF/sisu/javax.inject.Named).
+-->
+<extension xmlns="http://maven.apache.org/EXTENSION/1.1.0"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://maven.apache.org/EXTENSION/1.1.0 http://maven.apache.org/xsd/extension-1.1.0.xsd">
+  <exportedPackages/>
+  <exportedArtifacts/>
+</extension>
