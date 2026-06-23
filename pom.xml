@@ -81,6 +81,13 @@
       <version>${junit.version}</version>
       <scope>test</scope>
     </dependency>
+    <!-- Validates the produced manifest against docs/manifest.schema.json in the ITs. -->
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <version>1.5.6</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
