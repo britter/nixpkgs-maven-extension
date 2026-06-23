@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,6 +48,22 @@ final class Manifest {
     /** True if an artifact with the given {@code groupId:artifactId} (or {@code g:a:v}) is listed. */
     boolean contains(String key) {
         return keys.contains(key);
+    }
+
+    /**
+     * Every repository-relative path listed across all {@code files} arrays, with duplicates
+     * preserved so callers can detect a file listed more than once.
+     */
+    List<String> allFiles() {
+        List<String> files = new ArrayList<>();
+        Matcher arrays = Pattern.compile("\"files\"\\s*:\\s*\\[(.*?)]", Pattern.DOTALL).matcher(json);
+        while (arrays.find()) {
+            Matcher items = Pattern.compile("\"(.*?)\"").matcher(arrays.group(1));
+            while (items.find()) {
+                files.add(items.group(1));
+            }
+        }
+        return files;
     }
 
     String raw() {
