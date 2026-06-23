@@ -15,6 +15,15 @@
     repository and classifies each artifact as PROJECT-determined or Maven-IMPLICIT,
     emitting a canonical, Maven-version-independent provenance manifest.
   </description>
+  <inceptionYear>2026</inceptionYear>
+
+  <licenses>
+    <license>
+      <name>The Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
