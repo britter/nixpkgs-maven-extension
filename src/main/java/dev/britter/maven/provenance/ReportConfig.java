@@ -27,19 +27,24 @@ import org.apache.maven.execution.MavenSession;
  */
 public final class ReportConfig {
 
-    /** System property overriding the manifest path (absolute). */
+    /** System property overriding the project manifest path (absolute). */
     public static final String OUTPUT_PROPERTY = "repoprovenance.output";
+    /** System property overriding the implicit manifest path (absolute). */
+    public static final String IMPLICIT_OUTPUT_PROPERTY = "repoprovenance.implicitOutput";
     /** System property overriding the diagnostics report path (absolute). */
     public static final String REPORT_PROPERTY = "repoprovenance.report";
 
     static final String MANIFEST_FILE_NAME = "repo-provenance.json";
+    static final String IMPLICIT_MANIFEST_FILE_NAME = "repo-provenance-implicit.json";
     static final String REPORT_FILE_NAME = "repo-provenance-report.json";
 
     private final Path manifestPath;
+    private final Path implicitManifestPath;
     private final Path reportPath;
 
-    private ReportConfig(Path manifestPath, Path reportPath) {
+    private ReportConfig(Path manifestPath, Path implicitManifestPath, Path reportPath) {
         this.manifestPath = manifestPath;
+        this.implicitManifestPath = implicitManifestPath;
         this.reportPath = reportPath;
     }
 
@@ -47,9 +52,12 @@ public final class ReportConfig {
         Path buildDir = Paths.get(session.getTopLevelProject().getBuild().getDirectory());
         Path manifest = resolve(session.getSystemProperties().getProperty(OUTPUT_PROPERTY),
                 buildDir.resolve(MANIFEST_FILE_NAME));
+        Path implicitManifest = resolve(
+                session.getSystemProperties().getProperty(IMPLICIT_OUTPUT_PROPERTY),
+                buildDir.resolve(IMPLICIT_MANIFEST_FILE_NAME));
         Path report = resolve(session.getSystemProperties().getProperty(REPORT_PROPERTY),
                 buildDir.resolve(REPORT_FILE_NAME));
-        return new ReportConfig(manifest, report);
+        return new ReportConfig(manifest, implicitManifest, report);
     }
 
     private static Path resolve(String override, Path fallback) {
@@ -58,6 +66,10 @@ public final class ReportConfig {
 
     public Path manifestPath() {
         return manifestPath;
+    }
+
+    public Path implicitManifestPath() {
+        return implicitManifestPath;
     }
 
     public Path reportPath() {

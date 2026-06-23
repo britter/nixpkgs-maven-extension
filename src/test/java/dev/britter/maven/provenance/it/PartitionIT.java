@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import io.takari.maven.testing.TestResources;
 import io.takari.maven.testing.executor.MavenRuntime;
@@ -37,10 +38,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 /**
- * Partition correctness (design §9.3, group D): every PROJECT file is listed exactly once and
- * actually exists in the local repository, and volatile resolution-state files are never PROJECT
- * (design §5.3, group D.15). Uses an isolated local repository so the manifest can be checked
- * against the exact set of files the build produced.
+ * Partition correctness across both manifests (design §9.3, group D.14/D.15): the project and
+ * implicit manifests are disjoint, together cover exactly the non-volatile files in the local
+ * repository, list each file at most once, and never list a volatile resolution-state file. Uses an
+ * isolated local repository so the manifests can be checked against the exact set of files produced.
  */
 @RunWith(MavenJUnitTestRunner.class)
 @MavenVersions({"3.9.6", "3.9.12"})
@@ -60,7 +61,7 @@ public class PartitionIT {
     }
 
     @Test
-    public void projectFilesAreUniqueExistAndExcludeVolatileState() throws Exception {
+    public void manifestsPartitionTheNonVolatileRepository() throws Exception {
         File basedir = resources.getBasedir("reactor");
         Path localRepo = basedir.toPath().resolve("target/it-local-repo");
 
@@ -70,23 +71,62 @@ public class PartitionIT {
                 .execute("clean", "package")
                 .assertErrorFreeLog();
 
-        Path manifest = basedir.toPath().resolve("target/repo-provenance.json");
-        List<String> files = Manifest.read(manifest).allFiles();
-        assertFalse("expected a non-empty PROJECT set", files.isEmpty());
+        List<String> projectFiles =
+                Manifest.read(basedir.toPath().resolve("target/repo-provenance.json")).allFiles();
+        List<String> implicitFiles =
+                Manifest.read(basedir.toPath().resolve("target/repo-provenance-implicit.json"))
+                        .allFiles();
 
-        // Exactly once: no PROJECT file is listed twice across the whole manifest.
-        Set<String> unique = new HashSet<>(files);
-        assertEquals("a PROJECT file is listed more than once", unique.size(), files.size());
+        assertFalse("expected a non-empty PROJECT set", projectFiles.isEmpty());
+        assertFalse("expected a non-empty IMPLICIT set", implicitFiles.isEmpty());
 
-        for (String relative : files) {
-            // Each PROJECT file actually exists in the local repository (self-contained, §9.3).
-            assertTrue("manifest lists a file missing from the local repo: " + relative,
-                    Files.exists(localRepo.resolve(relative)));
-            // Volatile resolution-state files must never be PROJECT (§5.3, D.15).
+        // Each manifest lists every file at most once.
+        assertEquals("a file is listed twice in the project manifest",
+                new HashSet<>(projectFiles).size(), projectFiles.size());
+        assertEquals("a file is listed twice in the implicit manifest",
+                new HashSet<>(implicitFiles).size(), implicitFiles.size());
+
+        Set<String> project = new HashSet<>(projectFiles);
+        Set<String> implicit = new HashSet<>(implicitFiles);
+
+        // Disjoint: no file is in both manifests.
+        Set<String> overlap = new HashSet<>(project);
+        overlap.retainAll(implicit);
+        assertTrue("project and implicit manifests overlap: " + overlap, overlap.isEmpty());
+
+        Set<String> union = new HashSet<>(project);
+        union.addAll(implicit);
+
+        // No volatile resolution-state file is in either manifest (D.15).
+        for (String file : union) {
             for (String marker : VOLATILE_MARKERS) {
-                assertFalse("volatile file must not be PROJECT: " + relative,
-                        relative.contains(marker));
+                assertFalse("volatile file must not be in any manifest: " + file,
+                        file.contains(marker));
             }
         }
+
+        // The union equals the repository's non-volatile files: nothing missing, nothing spurious.
+        Set<String> repoNonVolatile = nonVolatileFiles(localRepo);
+        Set<String> missing = new HashSet<>(repoNonVolatile);
+        missing.removeAll(union);
+        assertTrue("non-volatile repo files covered by no manifest: " + missing, missing.isEmpty());
+        Set<String> spurious = new HashSet<>(union);
+        spurious.removeAll(repoNonVolatile);
+        assertTrue("manifest lists files absent from the repo: " + spurious, spurious.isEmpty());
+    }
+
+    /** Repository-relative POSIX paths of every non-volatile regular file under the local repo. */
+    private Set<String> nonVolatileFiles(Path localRepo) throws Exception {
+        Set<String> result = new HashSet<>();
+        try (Stream<Path> paths = Files.walk(localRepo)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                String relative = localRepo.relativize(path).toString().replace(File.separatorChar, '/');
+                boolean volatileFile = VOLATILE_MARKERS.stream().anyMatch(relative::contains);
+                if (!volatileFile) {
+                    result.add(relative);
+                }
+            }
+        }
+        return result;
     }
 }

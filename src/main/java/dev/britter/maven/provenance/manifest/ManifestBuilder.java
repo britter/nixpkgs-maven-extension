@@ -22,6 +22,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -62,12 +63,23 @@ public final class ManifestBuilder {
         this.localRepoBase = localRepoBase;
     }
 
-    /** Builds the sorted, completed manifest entries for the given PROJECT artifacts. */
-    public List<ManifestArtifact> build(List<ResolvedArtifact> projectArtifacts) {
+    /** Builds the sorted, completed manifest entries for the given artifacts. */
+    public List<ManifestArtifact> build(List<ResolvedArtifact> artifacts) {
+        return build(artifacts, new HashSet<>());
+    }
+
+    /**
+     * Builds canonical entries, claiming each file into {@code claimedFiles} so that no file appears
+     * in more than one entry. Files already present in {@code claimedFiles} (e.g. claimed by another
+     * manifest) are excluded, and entries left with no files are dropped. This keeps a single
+     * manifest internally exactly-once, and makes two manifests a disjoint partition when the second
+     * build is seeded with the first manifest's files.
+     */
+    public List<ManifestArtifact> build(List<ResolvedArtifact> artifacts, Set<String> claimedFiles) {
         // coordinate key -> (artifact metadata, files). TreeMap keeps a stable iteration order.
         Map<String, Entry> entries = new TreeMap<>();
 
-        for (ResolvedArtifact artifact : projectArtifacts) {
+        for (ResolvedArtifact artifact : artifacts) {
             if (artifact.file() == null) {
                 continue;
             }
@@ -93,16 +105,32 @@ public final class ManifestBuilder {
             addParentLineage(pom != null ? pom : artifact.file(), entries);
         }
 
-        List<ManifestArtifact> result = new ArrayList<>();
+        List<ManifestArtifact> candidates = new ArrayList<>();
         for (Entry e : entries.values()) {
-            List<String> files = e.files.stream().sorted().toList();
-            if (files.isEmpty()) {
+            if (e.files.isEmpty()) {
                 continue;
             }
-            result.add(new ManifestArtifact(
-                    e.groupId, e.artifactId, e.version, e.type, e.classifier, files));
+            candidates.add(new ManifestArtifact(
+                    e.groupId, e.artifactId, e.version, e.type, e.classifier,
+                    e.files.stream().sorted().toList()));
         }
-        result.sort(ManifestArtifact.CANONICAL_ORDER);
+        candidates.sort(ManifestArtifact.CANONICAL_ORDER);
+
+        // Claim files in canonical order: the first entry to reference a file keeps it; later
+        // entries — and files already claimed by a previously built manifest — drop it.
+        List<ManifestArtifact> result = new ArrayList<>();
+        for (ManifestArtifact candidate : candidates) {
+            List<String> kept = new ArrayList<>();
+            for (String file : candidate.files()) {
+                if (claimedFiles.add(file)) {
+                    kept.add(file);
+                }
+            }
+            if (!kept.isEmpty()) {
+                result.add(new ManifestArtifact(candidate.groupId(), candidate.artifactId(),
+                        candidate.version(), candidate.type(), candidate.classifier(), kept));
+            }
+        }
         return result;
     }
 

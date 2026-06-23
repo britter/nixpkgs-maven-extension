@@ -107,44 +107,79 @@ pinned plugin and an implicit one come out PROJECT — so it is never wrongly dr
 
 ## 6. Output contract
 
-The extension emits a single **manifest** describing the **PROJECT-determined set**.
-It deliberately does **not** list the IMPLICIT set: everything written to the local
-repository that is not in the manifest is IMPLICIT by definition. Keeping the implicit
-set out is what makes the manifest a pure, Maven-version-independent artifact — listing
-it would make the file Maven-specific. A consumer that needs the implicit set computes it
-as the **complement** (local repository minus the PROJECT set) at build time.
+The extension emits **two manifests** — written to **separate files** — that together form
+a lossless partition of everything written to the local repository:
+
+- the **project manifest** — the PROJECT-determined set. Maven-version-**independent**
+  (a function of the project's POMs), so it is byte-identical across Maven versions.
+- the **implicit manifest** — the IMPLICIT (Maven-determined) set. Maven-version-**specific**
+  by nature.
+
+They are kept in separate files on purpose: mixing the implicit set into the project
+manifest would make that file Maven-specific and destroy its determinism. Splitting them
+keeps the project manifest pure while still emitting the implicit set as a first-class
+output. `project ∪ implicit` equals the full set of artifacts the build wrote to the local
+repository (minus volatile metadata, §5.3); the two are disjoint.
+
+Why both are useful (the consuming pattern): a **real package** build is consumed via its
+*project* manifest (to build a Maven-independent dependency set); a dedicated **probe**
+build is consumed via its *implicit* manifest (to build the per-Maven-version shared
+implicit repository). Both are produced by the same classification, so the two halves are
+consistent by construction.
 
 ### 6.1 Location, timing, reactor aggregation
 
-- Single-module and **reactor** builds alike produce **one aggregated manifest** — never
-  one per module (so consumers read a single file, not a tree of per-module dirs).
-- Default location: the reactor execution root's build directory, i.e.
-  `<root>/target/repo-provenance.json` (the top-level project's
-  `${project.build.directory}`). Overridable via the `repoprovenance.output` system
-  property (absolute path).
-- Written **once, at session end**, after all modules have built, so it is complete.
+- Single-module and **reactor** builds alike produce **one aggregated manifest of each
+  kind** — never one per module (so consumers read a single file, not a tree of
+  per-module dirs).
+- Default locations, in the reactor execution root's build directory (the top-level
+  project's `${project.build.directory}`):
+  - project manifest: `<root>/target/repo-provenance.json`
+  - implicit manifest: `<root>/target/repo-provenance-implicit.json`
+
+  Both overridable via system properties (e.g. `repoprovenance.output`,
+  `repoprovenance.implicitOutput`).
+- Written **once, at session end**, after all modules have built, so they are complete.
   (Writing under `target/` is safe because it happens after the build; a `clean` earlier
-  in the same invocation does not affect it.)
-- In a reactor the PROJECT set is the **deduplicated union over all modules** (an artifact
-  that is PROJECT in any module is PROJECT — the reachability union of §5.2 / §7.1); each
-  artifact appears at most once.
+  in the same invocation does not affect them.)
+- In a reactor each set is the **deduplicated union over all modules** (for the project
+  set, an artifact that is PROJECT in any module is PROJECT — the reachability union of
+  §5.2 / §7.1). Each artifact appears at most once and in exactly one of the two manifests.
 
-### 6.2 Format and determinism
+### 6.2 Shared format
 
-- The manifest is **JSON** and MUST validate against
-  [`manifest.schema.json`](./manifest.schema.json).
-- It MUST be **canonical and diff-friendly**: `projectArtifacts` sorted by
+Both manifests are **JSON**, have the **identical shape**, and MUST validate against the
+single [`manifest.schema.json`](./manifest.schema.json): a `schemaVersion` plus an
+`artifacts` array. They are distinguished **only by file name** (§6.1), not by any
+top-level key or content marker — the project manifest's `artifacts` are the PROJECT set,
+the implicit manifest's `artifacts` are the IMPLICIT set.
+
+- Both MUST be **canonical and diff-friendly**: `artifacts` sorted by
   `(groupId, artifactId, version, type, classifier)`, each entry's `files` sorted,
   UTF-8/LF, and **no timestamps or run-specific data**.
-- Because it lists only the PROJECT set, the **whole manifest is
-  Maven-version-independent**: two builds of the same project sources on any Maven 3.9.x
-  release MUST produce a byte-identical manifest (acceptance test §9.2).
 - Each entry identifies an artifact by full coordinates and lists the repository-relative
   files that belong to it (primary file, `.pom`, checksums).
 
-### 6.3 Diagnostics report (separate file, non-normative, Maven-specific)
+### 6.3 Determinism (differs between the two files)
 
-Separately from the manifest, the extension emits a **report** (its own file, e.g.
+- The **project manifest** lists only the PROJECT set, so it is
+  **Maven-version-independent**: two builds of the same project sources on any Maven 3.9.x
+  release MUST produce a byte-identical project manifest (acceptance test §9.2).
+- The **implicit manifest** is the **realm-aware** capture of the IMPLICIT set: because the
+  extension observes what Maven actually resolved, it includes the deep plugin-realm
+  closure (e.g. `plexus-compiler`, the `maven-*` API trees, surefire providers) that a
+  coordinate-only enumeration misses. It is canonically sorted (same rules) but
+  **Maven-version-specific**, so it is deliberately **not** part of the §9.2 byte-identical
+  guarantee — two Maven versions are expected to differ; it feeds a per-Maven repository.
+- Primary use of the implicit manifest: run a dedicated **probe** project (one that
+  exercises the full default plugin menu — see the separate implicit-set note) and consume
+  its implicit manifest to assemble the shared, per-Maven implicit repository. A real
+  package also emits its own implicit manifest (harmless; useful for validating that its
+  implicit needs are a subset of the probe's).
+
+### 6.4 Diagnostics report (separate file, non-normative, Maven-specific)
+
+Separately from the two manifests, the extension emits a **report** (its own file, e.g.
 `<root>/target/repo-provenance-report.json`; **not** covered by the schema and explicitly
 *not* required to be stable across Maven versions). It carries:
 
@@ -153,13 +188,10 @@ Separately from the manifest, the extension emits a **report** (its own file, e.
   (§11).
 - per plugin/extension **provenance evidence** (version + PROJECT/IMPLICIT + source) for
   validating §5.1 and surfacing the §8 gray-zone artifacts.
-- optionally, the IMPLICIT set, as a convenience for consumers building a
-  per-Maven-version shared repository. (It is Maven-specific, which is exactly why it
-  lives here and not in the manifest.)
 
-The report MUST NOT be relied upon as the deterministic contract output; only the manifest
-is. The extension does **not** move, copy, prune, or fetch anything; acting on either
-output is the consumer's job and out of scope.
+The report MUST NOT be relied upon as a contract output; only the two manifests are. The
+extension does **not** move, copy, prune, or fetch anything; acting on any output is the
+consumer's job and out of scope.
 
 ## 7. Required behaviors / edge cases
 

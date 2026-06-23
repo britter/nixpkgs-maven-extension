@@ -16,15 +16,13 @@
 
 package dev.britter.maven.provenance.it;
 
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static org.junit.Assert.assertArrayEquals;
 
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.List;
-import java.util.stream.Stream;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import io.takari.maven.testing.TestResources;
 import io.takari.maven.testing.executor.MavenRuntime;
@@ -36,16 +34,19 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 /**
- * The central invariant (design §2, §9.2): the manifest must be <em>byte-identical</em> across
- * Maven versions, given the same project sources.
+ * The central invariant (design §2, §9.2): the project manifest must be <em>byte-identical</em>
+ * across Maven versions, given the same project sources.
  *
- * <p>The runner executes this method once per Maven version. Each run copies its manifest to a
- * shared, version-keyed file under {@code target/}; whichever run executes second finds the other
- * version's manifest already present and asserts the two are byte-for-byte equal.
+ * <p>The runner executes this method once per Maven version in the same JVM. Each run records its
+ * manifest bytes in a static map keyed by version; whichever run executes second finds the other
+ * version's bytes and asserts equality. Using in-memory state (not files on disk) keeps the check
+ * immune to stale outputs from a previous, non-cleaned build.
  */
 @RunWith(MavenJUnitTestRunner.class)
 @MavenVersions({"3.9.6", "3.9.12"})
 public class CrossVersionDeterminismIT {
+
+    private static final Map<String, byte[]> PROJECT_MANIFESTS = new ConcurrentHashMap<>();
 
     @Rule
     public final TestResources resources = new TestResources("src/test/resources/it", "target/it-work");
@@ -58,24 +59,19 @@ public class CrossVersionDeterminismIT {
     }
 
     @Test
-    public void manifestIsByteIdenticalAcrossMavenVersions() throws Exception {
+    public void projectManifestIsByteIdenticalAcrossMavenVersions() throws Exception {
         File basedir = resources.getBasedir("reactor");
         maven.forProject(basedir).withCliOption("-B").execute("clean", "package").assertErrorFreeLog();
-        Path produced = basedir.toPath().resolve("target/repo-provenance.json");
 
-        Path shared = Paths.get("target/cross-version");
-        Files.createDirectories(shared);
-        Path mine = shared.resolve(maven.getMavenVersion() + ".json");
-        Files.copy(produced, mine, REPLACE_EXISTING);
+        byte[] mine = Files.readAllBytes(basedir.toPath().resolve("target/repo-provenance.json"));
+        String version = maven.getMavenVersion();
+        PROJECT_MANIFESTS.put(version, mine);
 
-        byte[] myManifest = Files.readAllBytes(mine);
-        try (Stream<Path> others = Files.list(shared)) {
-            List<Path> peers = others.filter(p -> !p.equals(mine)).toList();
-            for (Path peer : peers) {
+        for (Map.Entry<String, byte[]> peer : PROJECT_MANIFESTS.entrySet()) {
+            if (!peer.getKey().equals(version)) {
                 assertArrayEquals(
-                        "manifest differs between Maven " + mine.getFileName() + " and "
-                                + peer.getFileName(),
-                        myManifest, Files.readAllBytes(peer));
+                        "project manifest differs between Maven " + version + " and " + peer.getKey(),
+                        mine, peer.getValue());
             }
         }
     }

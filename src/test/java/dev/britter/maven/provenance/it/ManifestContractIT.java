@@ -61,27 +61,35 @@ public class ManifestContractIT {
     }
 
     @Test
-    public void manifestValidatesAgainstSchema() throws Exception {
+    public void bothManifestsValidateAgainstSchema() throws Exception {
         File basedir = resources.getBasedir("reactor");
         maven.forProject(basedir).withCliOption("-B").execute("clean", "package").assertErrorFreeLog();
 
-        Path manifest = basedir.toPath().resolve("target/repo-provenance.json");
-        Set<ValidationMessage> errors = validate(manifest);
-        assertTrue("manifest violates schema: " + errors, errors.isEmpty());
+        // Both manifests share the identical shape and validate against the one schema (design §6.2).
+        Set<ValidationMessage> projectErrors =
+                validate(basedir.toPath().resolve("target/repo-provenance.json"));
+        assertTrue("project manifest violates schema: " + projectErrors, projectErrors.isEmpty());
+        Set<ValidationMessage> implicitErrors =
+                validate(basedir.toPath().resolve("target/repo-provenance-implicit.json"));
+        assertTrue("implicit manifest violates schema: " + implicitErrors, implicitErrors.isEmpty());
     }
 
     @Test
-    public void manifestIsReproducible() throws Exception {
+    public void bothManifestsAreReproducible() throws Exception {
         File basedir = resources.getBasedir("reactor");
-        Path manifest = basedir.toPath().resolve("target/repo-provenance.json");
+        Path projectManifest = basedir.toPath().resolve("target/repo-provenance.json");
+        Path implicitManifest = basedir.toPath().resolve("target/repo-provenance-implicit.json");
 
         maven.forProject(basedir).withCliOption("-B").execute("clean", "package").assertErrorFreeLog();
-        byte[] first = Files.readAllBytes(manifest);
+        byte[] firstProject = Files.readAllBytes(projectManifest);
+        byte[] firstImplicit = Files.readAllBytes(implicitManifest);
 
         maven.forProject(basedir).withCliOption("-B").execute("clean", "package").assertErrorFreeLog();
-        byte[] second = Files.readAllBytes(manifest);
-
-        assertArrayEquals("re-running the build produced a different manifest", first, second);
+        assertArrayEquals("re-running changed the project manifest",
+                firstProject, Files.readAllBytes(projectManifest));
+        // Same Maven version -> the implicit manifest is byte-identical too (design §6.3, H.27).
+        assertArrayEquals("re-running changed the implicit manifest",
+                firstImplicit, Files.readAllBytes(implicitManifest));
     }
 
     private static Set<ValidationMessage> validate(Path manifest) throws Exception {

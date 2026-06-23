@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/britter/nixpkgs-maven-extension/blob/main/docs/manifest.schema.json",
   "title": "Maven Local-Repository Provenance Manifest",
-  "description": "The PROJECT-determined set of artifacts written to the Maven local repository during a build, as produced by the provenance extension (see design.md). Everything written to the local repository that is NOT listed here is IMPLICIT by definition. This document must be canonical: projectArtifacts sorted by (groupId, artifactId, version, type, classifier), each entry's files sorted, UTF-8/LF, no timestamps or run-specific data, so that two builds of the same project on any Maven 3.9.x release produce byte-identical output.",
+  "description": "A provenance manifest: a list of artifacts written to the Maven local repository during a build, as produced by the provenance extension (see design.md §6). The extension writes two files with this IDENTICAL shape — they are distinguished by file name, not by content: the project manifest (e.g. repo-provenance.json) lists the PROJECT-determined set, the implicit manifest (e.g. repo-provenance-implicit.json) lists the IMPLICIT (Maven-determined) set. Each is one aggregated, deduplicated file per build (including reactor builds). The artifacts array MUST be canonical: sorted by (groupId, artifactId, version, type, classifier), each entry's files sorted, UTF-8/LF, no timestamps or run-specific data. The PROJECT manifest MUST additionally be byte-identical across Maven versions for the same project sources (design §2/§9.2); the IMPLICIT manifest is Maven-version-specific by nature and is not.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
-    "projectArtifacts"
+    "artifacts"
   ],
   "properties": {
     "schemaVersion": {
@@ -15,8 +15,8 @@
       "type": "string",
       "const": "1"
     },
-    "projectArtifacts": {
-      "description": "Sorted list of the PROJECT-determined artifacts. May be empty (a project whose entire footprint is Maven-implicit).",
+    "artifacts": {
+      "description": "The classified set of artifacts (PROJECT or IMPLICIT depending on which file this is). Sorted. May be empty.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/artifact"
@@ -59,7 +59,7 @@
           "minLength": 1
         },
         "files": {
-          "description": "Repository-relative POSIX paths of every file belonging to this artifact that is part of the PROJECT set (primary file, .pom, checksum sidecars). Sorted. No leading slash; forward slashes only.",
+          "description": "Repository-relative POSIX paths of every file belonging to this artifact (primary file, .pom, checksum sidecars). Sorted. No leading slash; forward slashes only.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
@@ -74,7 +74,7 @@
   "examples": [
     {
       "schemaVersion": "1",
-      "projectArtifacts": [
+      "artifacts": [
         {
           "groupId": "org.example",
           "artifactId": "lib",

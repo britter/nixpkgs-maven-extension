@@ -19,6 +19,7 @@ package dev.britter.maven.provenance;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -26,6 +27,8 @@ import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import dev.britter.maven.provenance.manifest.ManifestArtifact;
+import dev.britter.maven.provenance.manifest.ManifestBuilder;
 import dev.britter.maven.provenance.manifest.ManifestWriter;
 import dev.britter.maven.provenance.report.GrayZoneArtifact;
 import dev.britter.maven.provenance.report.ReportWriter;
@@ -77,8 +80,23 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
             List<ResolvedArtifact> projectArtifacts =
                     Classifier.projectArtifacts(universe, projectFiles);
 
+            // The IMPLICIT set is the rest of the observed universe. Because we observe what Maven
+            // actually resolved, this naturally includes the deep plugin-realm closure (design §6.3).
+            Set<ResolvedArtifact> projectSet = new HashSet<>(projectArtifacts);
+            List<ResolvedArtifact> implicitArtifacts = universe.stream()
+                    .filter(a -> !projectSet.contains(a))
+                    .toList();
+
+            // Build the project manifest first; seed the implicit build with the project's claimed
+            // files so the two manifests are a disjoint partition with PROJECT precedence (design §6).
+            ManifestBuilder builder = new ManifestBuilder(localRepoBase);
+            Set<String> claimed = new HashSet<>();
+            List<ManifestArtifact> projectEntries = builder.build(projectArtifacts, claimed);
+            List<ManifestArtifact> implicitEntries = builder.build(implicitArtifacts, claimed);
+
             ReportConfig config = ReportConfig.from(session);
-            manifestWriter.write(config.manifestPath(), projectArtifacts, localRepoBase);
+            manifestWriter.write(config.manifestPath(), projectEntries);
+            manifestWriter.write(config.implicitManifestPath(), implicitEntries);
 
             List<String> observedArtifacts = universe.stream()
                     .map(ResolvedArtifact::coordinates)
@@ -88,8 +106,10 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
             reportWriter.write(
                     config.reportPath(), evidence, observedArtifacts, grayZone, warnings);
 
-            LOGGER.info("repo-provenance: wrote manifest to {} ({} of {} observed artifacts are "
-                    + "PROJECT)", config.manifestPath(), projectArtifacts.size(), universe.size());
+            LOGGER.info("repo-provenance: wrote project manifest to {} and implicit manifest to {} "
+                    + "({} PROJECT / {} IMPLICIT of {} observed artifacts)",
+                    config.manifestPath(), config.implicitManifestPath(),
+                    projectArtifacts.size(), implicitArtifacts.size(), universe.size());
         } catch (Exception e) {
             // Never fail the build because of this observational extension.
             LOGGER.warn("repo-provenance: failed to produce outputs, build is unaffected", e);

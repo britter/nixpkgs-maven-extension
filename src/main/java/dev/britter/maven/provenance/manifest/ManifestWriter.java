@@ -25,7 +25,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import dev.britter.maven.provenance.ResolvedArtifact;
 import dev.britter.maven.provenance.json.JsonWriter;
 
 /**
@@ -40,11 +39,6 @@ import dev.britter.maven.provenance.json.JsonWriter;
 public final class ManifestWriter {
 
     private static final String SCHEMA_VERSION = "1";
-
-    /** Groups and completes PROJECT artifacts into canonical manifest entries. */
-    public List<ManifestArtifact> build(List<ResolvedArtifact> projectArtifacts, Path localRepoBase) {
-        return new ManifestBuilder(localRepoBase).build(projectArtifacts);
-    }
 
     /** Serializes manifest entries to canonical JSON. */
     public String toJson(List<ManifestArtifact> artifacts) {
@@ -63,14 +57,13 @@ public final class ManifestWriter {
             entry.put("files", new ArrayList<>(a.files()));
             list.add(entry);
         }
-        doc.put("projectArtifacts", list);
+        doc.put("artifacts", list);
         return JsonWriter.write(doc);
     }
 
-    /** Builds and writes the manifest to {@code manifestPath}. */
-    public void write(Path manifestPath, List<ResolvedArtifact> projectArtifacts, Path localRepoBase)
-            throws IOException {
-        String json = toJson(build(projectArtifacts, localRepoBase));
+    /** Serializes pre-built entries and writes the manifest to {@code manifestPath}. */
+    public void write(Path manifestPath, List<ManifestArtifact> artifacts) throws IOException {
+        String json = toJson(artifacts);
         Files.createDirectories(manifestPath.getParent());
         Files.writeString(manifestPath, json, StandardCharsets.UTF_8);
     }

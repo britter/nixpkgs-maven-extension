@@ -7,14 +7,18 @@ passing before the rest.
 
 Fixtures are small Maven projects (committed under the test resources). Where two Maven
 versions are required, the harness builds the same fixture with each and compares.
-"Manifest" always means the JSON document validated against
-[`manifest.schema.json`](./manifest.schema.json).
+
+The extension writes **two manifests** of identical shape (design §6), distinguished by
+file name: the **project manifest** (`repo-provenance.json`, the PROJECT set) and the
+**implicit manifest** (`repo-provenance-implicit.json`, the IMPLICIT set). Both validate
+against [`manifest.schema.json`](./manifest.schema.json). "The project manifest" / "the
+implicit manifest" are used explicitly below; an unqualified "manifest" in a project-side
+case means the project manifest.
 
 General assertions that apply to every case unless stated otherwise:
 
-- The manifest validates against the schema.
-- The manifest is canonical (sorted, no timestamps); re-running the same build yields a
-  byte-identical manifest.
+- Each manifest validates against the schema and is canonical (sorted, no timestamps).
+- Re-running the same build (same Maven version) yields byte-identical manifests.
 - The build result (the produced artifact) is identical to a build without the extension
   (the extension is observational, design §3).
 
@@ -27,10 +31,10 @@ stream and the manifest.
 
 1. **Pinned plugin → PROJECT.** Fixture pins `maven-compiler-plugin` to a fixed version
    in `<build><plugins>`. Expect: that plugin (and its realm closure) appears in
-   `projectArtifacts`; evidence marks it PROJECT with source = project POM.
+   the project manifest; evidence marks it PROJECT with source = project POM.
 2. **Unpinned default-bound plugin → IMPLICIT.** Fixture is a plain `jar` project that
    pins nothing. Expect: the default `resources`/`compiler`/`surefire`/`jar` plugins are
-   NOT in `projectArtifacts`; evidence marks them IMPLICIT (lifecycle binding / super-POM).
+   NOT in the project manifest; evidence marks them IMPLICIT (lifecycle binding / super-POM).
 3. **Declared-without-version → IMPLICIT.** Fixture lists `maven-surefire-plugin` in
    `<build><plugins>` with configuration but **no `<version>`**. Expect: IMPLICIT (the
    version came from Maven, not the project).
@@ -51,7 +55,7 @@ stream and the manifest.
 8. **Artifact shared between a PROJECT plugin realm and an IMPLICIT plugin realm →
    PROJECT.** Fixture pins a plugin whose realm shares a transitive dependency
    (same coordinates) with an implicit default plugin's realm. Expect: the shared
-   artifact is in `projectArtifacts` (reachable from the kept realm).
+   artifact is in the project manifest (reachable from the kept realm).
 9. **Artifact reachable only from an IMPLICIT realm → IMPLICIT.** A realm-only dependency
    of an unpinned default plugin, not used by the project or any pinned plugin. Expect:
    absent from the manifest.
@@ -73,13 +77,14 @@ stream and the manifest.
 
 ## D. Partition correctness (design §9.3)
 
-14. **Exhaustive, disjoint partition.** After a build, every file under the local
-    repository is either covered by exactly one `projectArtifacts` entry's `files` or is
-    IMPLICIT. Expect: no file is listed twice; no PROJECT file is missing; PROJECT and
-    IMPLICIT do not overlap.
+14. **Exhaustive, disjoint partition across both manifests.** After a build, every
+    non-volatile file under the local repository is covered by exactly one entry's `files`
+    in **either** the project manifest **or** the implicit manifest. Expect: the two
+    manifests' file sets are disjoint, and their union equals the repository's non-volatile
+    files — no file in both, none missing.
 15. **Metadata classification (design §5.3).** `maven-metadata-*.xml`, `_remote.repositories`,
     `*.lastUpdated`, `resolver-status.properties` are handled per the design (volatile →
-    IMPLICIT / excluded). Expect: none of these volatile files appear in `projectArtifacts`.
+    excluded). Expect: none of these volatile files appear in **either** manifest.
 
 ## E. Offline self-containment (design §9.5)
 
@@ -101,7 +106,7 @@ stream and the manifest.
     is listed distinctly in the evidence stream. Document the observed behavior.
 20. **Provider classification is consistent across frameworks.** Variants with JUnit 4
     and TestNG. Expect: each framework's provider is classified IMPLICIT and surfaced;
-    no provider leaks into `projectArtifacts` as PROJECT.
+    no provider leaks into the project manifest as PROJECT.
 
 ## G. Robustness / no-side-effects
 
@@ -113,3 +118,74 @@ stream and the manifest.
     classification for each lifecycle's implicit plugins.
 24. **Missing/!writable output path, malformed config.** Expect: a clear failure (or
     documented fallback) that does not corrupt the build.
+
+## H. Implicit manifest (the Maven-determined set, design §6.2/§6.3)
+
+The implicit manifest is a first-class output, not just the complement-by-omission. These
+cases assert it directly.
+
+25. **Implicit manifest is emitted.** For a normal build, a second manifest file (the
+    implicit manifest) is written alongside the project manifest, validates against the
+    schema, and is canonically sorted. Expect: both files exist; for a build that uses any
+    default plugin the implicit manifest is non-empty.
+26. **Realm-aware completeness (guards the `dependency:get` regression).** Build a plain
+    `jar` fixture. Expect: the implicit manifest contains not only the default plugin jars
+    (e.g. `maven-compiler-plugin`) but their **deep realm dependencies** — e.g.
+    `org.codehaus.plexus:plexus-compiler-api`/`plexus-compiler-javac` and the `maven-*` API
+    closure those realms load. (A coordinate-only enumeration misses these; the extension
+    must not, because it observes what Maven actually resolved.)
+27. **Per-version determinism (stable hash).** Re-run the same fixture under the **same**
+    Maven version. Expect: the implicit manifest is byte-identical between runs, so a hash
+    taken over it is stable until Maven is bumped.
+28. **Cross-version variance (the dual of §9.2).** Build the same fixture under two Maven
+    versions whose default plugin versions differ. Expect: the implicit manifests **differ**
+    (the implicit set tracks the Maven version) **while the project manifest is
+    byte-identical** (cross-check with C.11/C.13). The two manifests must move
+    independently.
+29. **No-test project.** A fixture with no tests. Expect: the implicit manifest carries the
+    default plugins but **no surefire provider** (none was triggered) — provider presence is
+    driven by the project's test setup, not unconditional.
+
+## I. Surefire providers in the implicit manifest (focus)
+
+The surefire test provider is the canonical project-driven-but-Maven-versioned artifact: it
+is selected by the project's test framework but versioned with surefire (design §8). It is
+IMPLICIT when surefire is unpinned, and must land in the **implicit manifest** (so a shared
+implicit repository can supply it), while the project's own test libraries stay PROJECT.
+
+30. **Provider is in the implicit manifest (JUnit 5).** Fixture with JUnit 5 tests, surefire
+    unpinned. Expect: the provider adapter `org.apache.maven.surefire:surefire-junit-platform`
+    and its realm closure appear in the **implicit manifest** (not merely surfaced in the
+    evidence stream, cf. F.19).
+31. **Project test libraries are PROJECT, not implicit.** Same fixture. Expect: the project's
+    declared test dependencies (`org.junit.jupiter:junit-jupiter*`, and `junit-bom` if
+    imported) appear in the **project manifest** and **not** in the implicit manifest.
+32. **Per-framework providers.** Variants with JUnit 4 (expect `surefire-junit4` /
+    `surefire-junit47`) and TestNG (expect a TestNG provider). Each framework's provider
+    adapter is in the implicit manifest; the framework libraries themselves are PROJECT.
+33. **Provider transitive launcher reachability (the subtle one).** For the JUnit 5 fixture,
+    `org.junit.platform:junit-platform-launcher` (whose version tracks the project's JUnit).
+    Expect: classified by §5.2 reachability — PROJECT if reachable from the project's
+    declared JUnit closure, IMPLICIT if pulled only through the provider realm — and present
+    in **exactly one** manifest, never both. Document which path the tested Maven versions
+    take.
+34. **Pinning surefire flips the provider to PROJECT.** Fixture pins
+    `maven-surefire-plugin` to a fixed version. Expect: surefire (and its realm, including
+    the provider) is PROJECT, so the provider now appears in the **project manifest** and
+    not the implicit one (it follows the plugin's provenance, §5.1/§5.2). Direct contrast
+    with case 30.
+35. **Provider version tracks Maven; JUnit version tracks the project.** Build the JUnit 5
+    fixture under two Maven versions with different bundled surefire. Expect: the provider
+    adapter's version in the implicit manifest changes with Maven, while the project's JUnit
+    version in the project manifest is unchanged. (This is precisely why the provider must
+    be implicit, not project.)
+36. **Multi-framework reactor: union + purification (probe shape).** A reactor with one
+    module per test framework (JUnit 4, JUnit 5, TestNG), surefire unpinned. Expect: the
+    aggregated implicit manifest contains **all** providers, and **none** of the modules'
+    declared test libraries (those are PROJECT). This mirrors how a comprehensive probe
+    yields the global implicit set.
+37. **Offline replay with the provider from the implicit set.** JUnit 5 fixture: split the
+    local repo into the PROJECT set (project manifest) and the IMPLICIT set (implicit
+    manifest), recombine, and build offline. Expect: the build succeeds **and the tests
+    actually run** (not skipped) — proving the provider in the implicit set is sufficient to
+    execute tests offline. Complements E.16/E.18.
