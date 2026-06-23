@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,6 +41,25 @@ final class ProvenanceReport {
                 Pattern.DOTALL);
         Matcher matcher = pattern.matcher(json);
         return matcher.find() ? matcher.group(1) : null;
+    }
+
+    /**
+     * Returns the sorted contents of the {@code observedArtifacts} array (the coordinate strings of
+     * every artifact the build resolved into the local repository).
+     */
+    List<String> observedArtifacts() {
+        Matcher array = Pattern.compile("\"observedArtifacts\"\\s*:\\s*\\[(.*?)]", Pattern.DOTALL)
+                .matcher(json);
+        if (!array.find()) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        Matcher items = Pattern.compile("\"(.*?)\"").matcher(array.group(1));
+        while (items.find()) {
+            result.add(items.group(1));
+        }
+        result.sort(String::compareTo);
+        return result;
     }
 
     String raw() {

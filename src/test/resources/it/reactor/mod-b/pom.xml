@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>dev.britter.it</groupId>
+    <artifactId>reactor</artifactId>
+    <version>1.0</version>
+  </parent>
+
+  <artifactId>mod-b</artifactId>
+  <packaging>jar</packaging>
+
+  <dependencies>
+    <!-- Inter-module dependency: forces mod-a to build before mod-b under -T. -->
+    <dependency>
+      <groupId>dev.britter.it</groupId>
+      <artifactId>mod-a</artifactId>
+      <version>1.0</version>
+    </dependency>
+  </dependencies>
+</project>

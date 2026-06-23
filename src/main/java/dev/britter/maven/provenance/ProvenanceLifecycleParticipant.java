@@ -44,13 +44,17 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
         try {
             List<String> warnings = new ArrayList<>();
             List<PluginEvidence> evidence = analyzer.analyze(session);
+            List<String> observedArtifacts = recorder.distinctArtifacts().stream()
+                    .map(ResolvedArtifact::coordinates)
+                    .distinct()
+                    .toList();
 
             ReportConfig config = ReportConfig.from(session);
-            reportWriter.write(config.reportPath(), evidence, warnings);
+            reportWriter.write(config.reportPath(), evidence, observedArtifacts, warnings);
 
             LOGGER.info("repo-provenance: wrote provenance report to {} ({} plugins/extensions, "
-                    + "{} artifact resolutions observed)",
-                    config.reportPath(), evidence.size(), recorder.artifactCount());
+                    + "{} artifacts observed)",
+                    config.reportPath(), evidence.size(), observedArtifacts.size());
         } catch (Exception e) {
             // Never fail the build because of this observational extension.
             LOGGER.warn("repo-provenance: failed to produce outputs, build is unaffected", e);

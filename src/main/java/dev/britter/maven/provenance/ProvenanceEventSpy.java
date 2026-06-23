@@ -4,8 +4,11 @@ import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import java.io.File;
+
 import org.apache.maven.eventspy.AbstractEventSpy;
 import org.eclipse.aether.RepositoryEvent;
+import org.eclipse.aether.artifact.Artifact;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +49,29 @@ public class ProvenanceEventSpy extends AbstractEventSpy {
     }
 
     private void onRepositoryEvent(RepositoryEvent event) {
-        // Recording of resolved artifacts/metadata is implemented in a later increment.
+        switch (event.getType()) {
+            case ARTIFACT_RESOLVED, ARTIFACT_DOWNLOADED -> recordArtifact(event);
+            case METADATA_RESOLVED, METADATA_DOWNLOADED -> recorder.recordMetadata(event.getFile());
+            default -> {
+                // Other events (installing, deploying, descriptor invalid, ...) are not footprint.
+            }
+        }
+    }
+
+    private void recordArtifact(RepositoryEvent event) {
+        Artifact artifact = event.getArtifact();
+        if (artifact == null) {
+            return;
+        }
+        // event.getFile() is the file in the local repository; fall back to the artifact's file.
+        File file = event.getFile() != null ? event.getFile() : artifact.getFile();
+        String classifier = artifact.getClassifier();
+        recorder.recordArtifact(new ResolvedArtifact(
+                artifact.getGroupId(),
+                artifact.getArtifactId(),
+                artifact.getVersion(),
+                artifact.getExtension(),
+                classifier == null || classifier.isEmpty() ? null : classifier,
+                file));
     }
 }

@@ -21,4 +21,13 @@ public record ResolvedArtifact(
         String type,
         String classifier,
         File file) {
+
+    /**
+     * Canonical coordinate string {@code groupId:artifactId:version:type[:classifier]}, used for
+     * diagnostics and stable ordering.
+     */
+    public String coordinates() {
+        String base = groupId + ":" + artifactId + ":" + version + ":" + type;
+        return classifier == null ? base : base + ":" + classifier;
+    }
 }

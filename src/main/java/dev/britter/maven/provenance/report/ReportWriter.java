@@ -20,14 +20,19 @@ import dev.britter.maven.provenance.json.JsonWriter;
 public final class ReportWriter {
 
     /** Builds and writes the report document to {@code reportPath}. */
-    public void write(Path reportPath, List<PluginEvidence> evidence, List<String> warnings)
+    public void write(
+            Path reportPath,
+            List<PluginEvidence> evidence,
+            List<String> observedArtifacts,
+            List<String> warnings)
             throws IOException {
-        String json = JsonWriter.write(buildDocument(evidence, warnings));
+        String json = JsonWriter.write(buildDocument(evidence, observedArtifacts, warnings));
         Files.createDirectories(reportPath.getParent());
         Files.writeString(reportPath, json, StandardCharsets.UTF_8);
     }
 
-    private Map<String, Object> buildDocument(List<PluginEvidence> evidence, List<String> warnings) {
+    private Map<String, Object> buildDocument(
+            List<PluginEvidence> evidence, List<String> observedArtifacts, List<String> warnings) {
         Map<String, Object> doc = new LinkedHashMap<>();
         doc.put("warnings", new ArrayList<>(warnings));
         List<Object> plugins = new ArrayList<>();
@@ -42,6 +47,9 @@ public final class ReportWriter {
             plugins.add(entry);
         }
         doc.put("pluginProvenance", plugins);
+        // Maven-specific diagnostics: the full set of artifacts observed hitting the local
+        // repository, sorted so it is independent of (parallel) resolution order.
+        doc.put("observedArtifacts", new ArrayList<>(observedArtifacts));
         return doc;
     }
 }

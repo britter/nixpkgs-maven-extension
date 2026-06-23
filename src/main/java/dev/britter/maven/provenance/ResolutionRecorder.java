@@ -1,7 +1,11 @@
 package dev.britter.maven.provenance;
 
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.io.File;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -12,23 +16,59 @@ import org.eclipse.aether.RepositoryEvent;
  * Shared, build-scoped collector of everything resolved into the local repository.
  *
  * <p>This singleton is written concurrently: in a parallel reactor build ({@code mvn -T})
- * {@link RepositoryEvent}s fire on several worker threads at once. All mutable state must therefore
- * be held in thread-safe structures and updated without check-then-act races. Reads happen only at
+ * {@link RepositoryEvent}s fire on several worker threads at once. All mutable state is therefore
+ * held in thread-safe structures and updated without check-then-act races. Reads happen only at
  * session end, after every worker thread has finished (a happens-before barrier), so the
- * classification that consumes this data can run single-threaded over a stable snapshot.
+ * classification that consumes this data runs single-threaded over a stable snapshot.
+ *
+ * <p>We deduplicate on insertion (an artifact/file is typically resolved many times across a
+ * reactor) using the keys of concurrent maps, which makes the recorded sets independent of thread
+ * interleaving — a precondition for the manifest being identical between serial and parallel
+ * builds.
  */
 @Named
 @Singleton
 public class ResolutionRecorder {
 
-    private final Queue<ResolvedArtifact> artifacts = new ConcurrentLinkedQueue<>();
+    // Keyed by absolute file path so repeated resolutions of the same file collapse to one entry.
+    private final Map<String, ResolvedArtifact> artifacts = new ConcurrentHashMap<>();
+    private final Set<String> metadataFiles = ConcurrentHashMap.newKeySet();
 
     /** Records a single artifact resolution. Safe to call from any thread. */
     public void recordArtifact(ResolvedArtifact artifact) {
-        artifacts.add(artifact);
+        if (artifact.file() != null) {
+            artifacts.putIfAbsent(artifact.file().getAbsolutePath(), artifact);
+        }
     }
 
-    /** Number of artifact resolutions recorded so far. Intended for diagnostics. */
+    /** Records a resolved repository metadata file (e.g. {@code maven-metadata-*.xml}). */
+    public void recordMetadata(File file) {
+        if (file != null) {
+            metadataFiles.add(file.getAbsolutePath());
+        }
+    }
+
+    /**
+     * The distinct artifacts observed, in a deterministic order independent of resolution timing.
+     */
+    public List<ResolvedArtifact> distinctArtifacts() {
+        return artifacts.values().stream()
+                .sorted(Comparator
+                        .comparing(ResolvedArtifact::groupId)
+                        .thenComparing(ResolvedArtifact::artifactId)
+                        .thenComparing(ResolvedArtifact::version)
+                        .thenComparing(ResolvedArtifact::type)
+                        .thenComparing(a -> a.classifier() == null ? "" : a.classifier())
+                        .thenComparing(a -> a.file().getAbsolutePath()))
+                .toList();
+    }
+
+    /** The distinct metadata files observed, sorted. */
+    public List<String> distinctMetadataFiles() {
+        return metadataFiles.stream().sorted().toList();
+    }
+
+    /** Number of distinct artifact files recorded. Intended for diagnostics. */
     public int artifactCount() {
         return artifacts.size();
     }
