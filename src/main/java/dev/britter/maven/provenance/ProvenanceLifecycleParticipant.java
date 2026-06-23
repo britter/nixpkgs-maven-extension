@@ -1,9 +1,13 @@
 package dev.britter.maven.provenance;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import dev.britter.maven.provenance.report.ReportWriter;
 import org.apache.maven.AbstractMavenLifecycleParticipant;
 import org.apache.maven.execution.MavenSession;
 import org.slf4j.Logger;
@@ -27,6 +31,8 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
     private static final Logger LOGGER = LoggerFactory.getLogger(ProvenanceLifecycleParticipant.class);
 
     private final ResolutionRecorder recorder;
+    private final ProvenanceAnalyzer analyzer = new ProvenanceAnalyzer();
+    private final ReportWriter reportWriter = new ReportWriter();
 
     @Inject
     public ProvenanceLifecycleParticipant(ResolutionRecorder recorder) {
@@ -36,12 +42,18 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
     @Override
     public void afterSessionEnd(MavenSession session) {
         try {
-            LOGGER.debug("repo-provenance: session ended, {} artifact resolutions observed",
-                    recorder.artifactCount());
-            // Classification and manifest/report writing are implemented in later increments.
-        } catch (RuntimeException e) {
+            List<String> warnings = new ArrayList<>();
+            List<PluginEvidence> evidence = analyzer.analyze(session);
+
+            ReportConfig config = ReportConfig.from(session);
+            reportWriter.write(config.reportPath(), evidence, warnings);
+
+            LOGGER.info("repo-provenance: wrote provenance report to {} ({} plugins/extensions, "
+                    + "{} artifact resolutions observed)",
+                    config.reportPath(), evidence.size(), recorder.artifactCount());
+        } catch (Exception e) {
             // Never fail the build because of this observational extension.
-            LOGGER.warn("repo-provenance: failed to produce manifest, build is unaffected", e);
+            LOGGER.warn("repo-provenance: failed to produce outputs, build is unaffected", e);
         }
     }
 }

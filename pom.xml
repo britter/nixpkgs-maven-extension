@@ -19,7 +19,13 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <maven.compiler.release>25</maven.compiler.release>
+    <!--
+      The extension must be loadable by the oldest Maven we support (3.9.6). That Maven bundles
+      Sisu 0.9.0.M2, whose ASM cannot parse Java 22+ class files during component scanning, so a
+      newer bytecode level would make our @Named components silently undiscoverable there. We
+      therefore compile to Java 17 bytecode; the extension still runs on any JDK 17+ (incl. 25).
+    -->
+    <maven.compiler.release>17</maven.compiler.release>
 
     <!-- The minimum Maven version we compile and test against. -->
     <maven.api.version>3.9.6</maven.api.version>
@@ -27,6 +33,7 @@
     <resolver.version>1.9.18</resolver.version>
 
     <takari.testing.version>3.1.0</takari.testing.version>
+    <takari.lifecycle.version>2.3.0</takari.lifecycle.version>
     <junit.version>4.13.2</junit.version>
   </properties>
 
@@ -74,27 +81,6 @@
       <version>${junit.version}</version>
       <scope>test</scope>
     </dependency>
-
-    <!--
-      Maven distributions provisioned for @MavenVersions integration tests. The takari
-      runner resolves and unpacks these from the local repository.
-    -->
-    <dependency>
-      <groupId>org.apache.maven</groupId>
-      <artifactId>apache-maven</artifactId>
-      <version>3.9.6</version>
-      <classifier>bin</classifier>
-      <type>tar.gz</type>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.maven</groupId>
-      <artifactId>apache-maven</artifactId>
-      <version>3.9.12</version>
-      <classifier>bin</classifier>
-      <type>tar.gz</type>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 
   <build>
@@ -124,6 +110,25 @@
     </pluginManagement>
 
     <plugins>
+      <!--
+        Generates the test.properties file the takari testing harness reads from the test
+        classpath (local repository, settings, remote repositories). Required by @MavenVersions.
+      -->
+      <plugin>
+        <groupId>io.takari.maven.plugins</groupId>
+        <artifactId>takari-lifecycle-plugin</artifactId>
+        <version>${takari.lifecycle.version}</version>
+        <executions>
+          <execution>
+            <id>testProperties</id>
+            <phase>process-test-resources</phase>
+            <goals>
+              <goal>testProperties</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
       <!-- Unit tests (*Test) run in the test phase. -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
