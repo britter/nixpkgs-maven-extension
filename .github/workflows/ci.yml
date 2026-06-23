@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The extension compiles to Java 17 bytecode but runs on a modern JDK; the integration
+      # tests fork Maven 3.9.6 and 3.9.12 under this JDK (see docs/design.md and the bytecode
+      # note in the README).
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Build and run tests
+        run: mvn -B -ntp verify
