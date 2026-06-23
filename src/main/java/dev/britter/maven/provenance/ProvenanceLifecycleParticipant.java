@@ -11,6 +11,7 @@ import javax.inject.Named;
 import javax.inject.Singleton;
 
 import dev.britter.maven.provenance.manifest.ManifestWriter;
+import dev.britter.maven.provenance.report.GrayZoneArtifact;
 import dev.britter.maven.provenance.report.ReportWriter;
 import org.apache.maven.AbstractMavenLifecycleParticipant;
 import org.apache.maven.execution.MavenSession;
@@ -67,7 +68,9 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
                     .map(ResolvedArtifact::coordinates)
                     .distinct()
                     .toList();
-            reportWriter.write(config.reportPath(), evidence, observedArtifacts, warnings);
+            List<GrayZoneArtifact> grayZone = grayZone(universe, projectFiles);
+            reportWriter.write(
+                    config.reportPath(), evidence, observedArtifacts, grayZone, warnings);
 
             LOGGER.info("repo-provenance: wrote manifest to {} ({} of {} observed artifacts are "
                     + "PROJECT)", config.manifestPath(), projectArtifacts.size(), universe.size());
@@ -76,4 +79,20 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
             LOGGER.warn("repo-provenance: failed to produce outputs, build is unaffected", e);
         }
     }
+
+    /** Identifies dynamically-resolved test providers and records how they were classified (§8). */
+    private static List<GrayZoneArtifact> grayZone(
+            List<ResolvedArtifact> universe, Set<String> projectFiles) {
+        return universe.stream()
+                .filter(a -> GrayZoneDetector.isDynamicTestProvider(a.groupId(), a.artifactId()))
+                .map(a -> new GrayZoneArtifact(
+                        a.coordinates(),
+                        a.file() != null && projectFiles.contains(a.file().getAbsolutePath())
+                                ? Provenance.PROJECT
+                                : Provenance.IMPLICIT,
+                        "surefire/failsafe provider resolved dynamically by an implicit plugin"))
+                .distinct()
+                .toList();
+    }
 }
+
