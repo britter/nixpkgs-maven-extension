@@ -1,21 +1,16 @@
 # nixpkgs-maven-extension
 
 A Maven **core extension** that observes everything a build writes to the local repository and
-classifies each artifact as either:
+partitions it into **two canonical JSON manifests** of identical shape:
 
-- **PROJECT-determined** — a pure function of the project's own POMs (its declared dependencies and
-  any plugin/extension whose version the project or a parent POM it inherits pins). This set is
-  **identical regardless of which Maven 3.9.x release runs the build**.
-- **Maven-determined (IMPLICIT)** — whatever Maven binds on the project's behalf (default lifecycle
-  plugins, the super-POM's `pluginManagement`, and everything reachable only through those plugins'
-  realms). This set changes from one Maven distribution to another.
-
-The extension emits **two canonical JSON manifests** of identical shape, distinguished by file name:
-
-- the **project manifest** (`repo-provenance.json`) — the PROJECT set. Because it lists only what the
-  project's POMs determine, it is **byte-identical across Maven versions**.
-- the **implicit manifest** (`repo-provenance-implicit.json`) — the IMPLICIT (Maven-determined) set.
-  It is canonically sorted but **Maven-version-specific** by nature.
+- the **project manifest** (`repo-provenance.json`) — the **PROJECT-determined** set: a pure function
+  of the project's own POMs (declared dependencies, plus any plugin/extension whose version the
+  project or an inherited parent pins). Because only the POMs determine it, it is **byte-identical
+  across Maven 3.9.x releases**.
+- the **implicit manifest** (`repo-provenance-implicit.json`) — the **Maven-determined (IMPLICIT)**
+  set: whatever Maven binds on the project's behalf (default lifecycle plugins, the super-POM's
+  `pluginManagement`, and everything reachable only through those plugins' realms). Canonically
+  sorted but **Maven-version-specific** by nature.
 
 Together they are a lossless, disjoint partition of everything the build wrote to the local
 repository (minus volatile metadata). A downstream system (e.g. a Nix packaging pipeline) consumes a
@@ -75,8 +70,8 @@ Written once at the end of the build, at the reactor execution root:
 
 | File | Description |
 | --- | --- |
-| `target/repo-provenance.json` | The **project manifest** — the canonical, Maven-version-independent PROJECT set. Validates against [`docs/manifest.schema.json`](docs/manifest.schema.json). |
-| `target/repo-provenance-implicit.json` | The **implicit manifest** — the IMPLICIT (Maven-determined) set, in the same shape and schema. Canonically sorted but Maven-version-specific. |
+| `target/repo-provenance.json` | The **project manifest** (above). Validates against [`docs/manifest.schema.json`](docs/manifest.schema.json). |
+| `target/repo-provenance-implicit.json` | The **implicit manifest** (above) — same shape and schema. |
 | `target/repo-provenance-report.json` | A **diagnostics report** — Maven-specific, *not* part of the deterministic contract. Carries warnings, per-plugin/extension provenance evidence, and the full set of observed artifacts. |
 
 In a multi-module build each manifest is the deduplicated union over all modules — **one aggregated
