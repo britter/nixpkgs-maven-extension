@@ -42,17 +42,6 @@ public final class LocalRepoPaths {
             return null;
         }
         Path relative = normalizedBase.relativize(normalizedFile);
-        return toPosix(relative);
-    }
-
-    private static String toPosix(Path relative) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < relative.getNameCount(); i++) {
-            if (i > 0) {
-                sb.append('/');
-            }
-            sb.append(relative.getName(i));
-        }
-        return sb.toString();
+        return relative.toString().replace(File.separatorChar, '/');
     }
 }

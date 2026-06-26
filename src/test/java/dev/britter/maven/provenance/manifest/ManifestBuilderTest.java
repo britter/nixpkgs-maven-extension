@@ -63,7 +63,7 @@ public class ManifestBuilderTest {
         File pom = new File(jar.getParentFile(), "a-1.pom");
 
         List<ManifestArtifact> entries = new ManifestBuilder(repo.getRoot().toPath())
-                .build(List.of(artifact("a", "jar", jar), artifact("a", "pom", pom)));
+                .build(List.of(artifact("a", "jar", jar), artifact("a", "pom", pom)), new HashSet<>());
 
         // One entry for the coordinate; the pom is listed exactly once (folded into the jar entry).
         assertEquals(1, entries.size());

@@ -67,9 +67,8 @@ public class ProvenanceEventSpy extends AbstractEventSpy {
     private void onRepositoryEvent(RepositoryEvent event) {
         switch (event.getType()) {
             case ARTIFACT_RESOLVED, ARTIFACT_DOWNLOADED -> recordArtifact(event);
-            case METADATA_RESOLVED, METADATA_DOWNLOADED -> recorder.recordMetadata(event.getFile());
             default -> {
-                // Other events (installing, deploying, descriptor invalid, ...) are not footprint.
+                // Other events (metadata, installing, deploying, ...) are not footprint.
             }
         }
     }

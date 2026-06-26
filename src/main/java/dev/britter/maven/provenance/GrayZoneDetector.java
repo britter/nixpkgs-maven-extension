@@ -39,7 +39,6 @@ public final class GrayZoneDetector {
             return false;
         }
         return artifactId.startsWith("surefire-junit")
-                || artifactId.equals("surefire-testng")
                 || artifactId.startsWith("surefire-testng");
     }
 }

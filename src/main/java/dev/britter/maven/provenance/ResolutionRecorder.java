@@ -16,11 +16,9 @@
 
 package dev.britter.maven.provenance;
 
-import java.io.File;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.inject.Named;
@@ -48,19 +46,11 @@ public class ResolutionRecorder {
 
     // Keyed by absolute file path so repeated resolutions of the same file collapse to one entry.
     private final Map<String, ResolvedArtifact> artifacts = new ConcurrentHashMap<>();
-    private final Set<String> metadataFiles = ConcurrentHashMap.newKeySet();
 
     /** Records a single artifact resolution. Safe to call from any thread. */
     public void recordArtifact(ResolvedArtifact artifact) {
         if (artifact.file() != null) {
             artifacts.putIfAbsent(artifact.file().getAbsolutePath(), artifact);
-        }
-    }
-
-    /** Records a resolved repository metadata file (e.g. {@code maven-metadata-*.xml}). */
-    public void recordMetadata(File file) {
-        if (file != null) {
-            metadataFiles.add(file.getAbsolutePath());
         }
     }
 
@@ -77,15 +67,5 @@ public class ResolutionRecorder {
                         .thenComparing(a -> a.classifier() == null ? "" : a.classifier())
                         .thenComparing(a -> a.file().getAbsolutePath()))
                 .toList();
-    }
-
-    /** The distinct metadata files observed, sorted. */
-    public List<String> distinctMetadataFiles() {
-        return metadataFiles.stream().sorted().toList();
-    }
-
-    /** Number of distinct artifact files recorded. Intended for diagnostics. */
-    public int artifactCount() {
-        return artifacts.size();
     }
 }

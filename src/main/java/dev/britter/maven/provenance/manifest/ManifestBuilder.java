@@ -63,11 +63,6 @@ public final class ManifestBuilder {
         this.localRepoBase = localRepoBase;
     }
 
-    /** Builds the sorted, completed manifest entries for the given artifacts. */
-    public List<ManifestArtifact> build(List<ResolvedArtifact> artifacts) {
-        return build(artifacts, new HashSet<>());
-    }
-
     /**
      * Builds canonical entries, claiming each file into {@code claimedFiles} so that no file appears
      * in more than one entry. Files already present in {@code claimedFiles} (e.g. claimed by another
