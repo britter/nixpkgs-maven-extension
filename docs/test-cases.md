@@ -101,12 +101,12 @@ stream and the manifest.
 
 ## F. Gray zones (design §8) — characterize, don't necessarily "fix"
 
-19. **Surefire provider is IMPLICIT and surfaced.** Fixture has JUnit 5 tests. Expect:
-    the `surefire-junit-platform` provider (and its closure) is classified IMPLICIT and
-    is listed distinctly in the evidence stream. Document the observed behavior.
+19. **Surefire provider is IMPLICIT.** Fixture has JUnit 5 tests. Expect: the
+    `surefire-junit-platform` provider (and its closure) is classified IMPLICIT and lands
+    in the implicit manifest (group I), never the project manifest.
 20. **Provider classification is consistent across frameworks.** Variants with JUnit 4
-    and TestNG. Expect: each framework's provider is classified IMPLICIT and surfaced;
-    no provider leaks into the project manifest as PROJECT.
+    and TestNG. Expect: each framework's provider is classified IMPLICIT; no provider
+    leaks into the project manifest as PROJECT.
 
 ## G. Robustness / no-side-effects
 
@@ -155,8 +155,7 @@ implicit repository can supply it), while the project's own test libraries stay 
 
 30. **Provider is in the implicit manifest (JUnit 5).** Fixture with JUnit 5 tests, surefire
     unpinned. Expect: the provider adapter `org.apache.maven.surefire:surefire-junit-platform`
-    and its realm closure appear in the **implicit manifest** (not merely surfaced in the
-    evidence stream, cf. F.19).
+    and its realm closure appear in the **implicit manifest** (cf. F.19).
 31. **Project test libraries are PROJECT, not implicit.** Same fixture. Expect: the project's
     declared test dependencies (`org.junit.jupiter:junit-jupiter*`, and `junit-bom` if
     imported) appear in the **project manifest** and **not** in the implicit manifest.

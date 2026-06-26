@@ -121,11 +121,8 @@ keeps the project manifest pure while still emitting the implicit set as a first
 output. `project ∪ implicit` equals the full set of artifacts the build wrote to the local
 repository (minus volatile metadata, §5.3); the two are disjoint.
 
-Why both are useful (the consuming pattern): a **real package** build is consumed via its
-*project* manifest (to build a Maven-independent dependency set); a dedicated **probe**
-build is consumed via its *implicit* manifest (to build the per-Maven-version shared
-implicit repository). Both are produced by the same classification, so the two halves are
-consistent by construction.
+Both are produced by the same classification, so the two halves are consistent by
+construction; §6.3 describes how each is consumed.
 
 ### 6.1 Location, timing, reactor aggregation
 
@@ -187,7 +184,7 @@ Separately from the two manifests, the extension emits a **report** (its own fil
   undeterminable plugin version provenance). Consumers use this for the fallback decision
   (§11).
 - per plugin/extension **provenance evidence** (version + PROJECT/IMPLICIT + source) for
-  validating §5.1 and surfacing the §8 gray-zone artifacts.
+  validating §5.1.
 
 The report MUST NOT be relied upon as a contract output; only the two manifests are. The
 extension does **not** move, copy, prune, or fetch anything; acting on any output is the
@@ -216,10 +213,10 @@ consumer's job and out of scope.
 - **Dynamically resolved plugin dependencies** — the canonical case is the surefire test
   **provider** (e.g. JUnit-platform vs JUnit4 vs TestNG), which an IMPLICIT plugin selects
   *at runtime based on the project's test dependencies*, at a version tied to the plugin
-  version. By §5.2 these come out IMPLICIT (realm-reachable only from an implicit plugin).
-  The extension must classify them deterministically and **list them distinctly** in the
-  evidence stream so the consumer can decide how to supply them. Do not try to reclassify
-  them as PROJECT.
+  version. By §5.2 these come out IMPLICIT (realm-reachable only from an implicit plugin),
+  so they land in the **implicit manifest** like any other Maven-determined artifact (group
+  I). The extension must classify them deterministically; pinning the test plugin moves the
+  provider into the project set with it (§5.1/§5.2). Otherwise do not special-case them.
 - **Version ranges / SNAPSHOT** in project dependencies make the project set itself
   non-deterministic independent of this extension; out of scope, but the manifest should
   faithfully reflect whatever was resolved.
