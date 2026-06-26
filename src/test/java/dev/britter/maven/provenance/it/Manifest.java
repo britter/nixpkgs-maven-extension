@@ -67,6 +67,24 @@ final class Manifest {
     }
 
     /**
+     * The version listed for the given {@code groupId:artifactId}, or {@code null} if absent. If the
+     * coordinate appears at more than one version this returns one of them (sufficient for the
+     * single-version cases the tests assert on).
+     */
+    String versionOf(String groupArtifact) {
+        String prefix = groupArtifact + ":";
+        for (String key : keys) {
+            if (key.startsWith(prefix)) {
+                String rest = key.substring(prefix.length());
+                if (!rest.isEmpty() && rest.indexOf(':') < 0) {
+                    return rest;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Every repository-relative path listed across all {@code files} arrays, with duplicates
      * preserved so callers can detect a file listed more than once.
      */

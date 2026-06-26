@@ -87,6 +87,23 @@ public final class ReactorInspector {
             }
         }
 
+        // Dynamically resolved test providers (the canonical §8 gray zone) are versioned with — and
+        // selected by — the surefire/failsafe plugin, but live in no realm or trace we can follow.
+        // They therefore follow that plugin's provenance: PROJECT iff the test plugin is PROJECT
+        // (so pinning surefire moves the provider into the project set, design group I). Keying on a
+        // version-pinned plugin keeps the project manifest deterministic.
+        boolean testPluginIsProject = evidence.stream().anyMatch(e ->
+                e.provenance() == Provenance.PROJECT
+                        && (e.key().equals("org.apache.maven.plugins:maven-surefire-plugin")
+                        || e.key().equals("org.apache.maven.plugins:maven-failsafe-plugin")));
+        if (testPluginIsProject) {
+            for (ResolvedArtifact artifact : universe) {
+                if (GrayZoneDetector.isDynamicTestProvider(artifact.groupId(), artifact.artifactId())) {
+                    addFile(projectFiles, artifact.file());
+                }
+            }
+        }
+
         // 3. Project-supplied plugin dependencies are project-controlled even when the plugin is
         //    IMPLICIT (§7.3); include their files by matching declared coordinates in the universe.
         Set<String> declaredPluginDepGavs = new HashSet<>();
