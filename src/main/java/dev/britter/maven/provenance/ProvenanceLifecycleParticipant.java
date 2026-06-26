@@ -18,7 +18,6 @@ package dev.britter.maven.provenance;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -30,7 +29,6 @@ import javax.inject.Singleton;
 import dev.britter.maven.provenance.manifest.ManifestArtifact;
 import dev.britter.maven.provenance.manifest.ManifestBuilder;
 import dev.britter.maven.provenance.manifest.ManifestWriter;
-import dev.britter.maven.provenance.report.GrayZoneArtifact;
 import dev.britter.maven.provenance.report.ReportWriter;
 import org.apache.maven.AbstractMavenLifecycleParticipant;
 import org.apache.maven.execution.MavenSession;
@@ -70,7 +68,6 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
     @Override
     public void afterSessionEnd(MavenSession session) {
         try {
-            List<String> warnings = new ArrayList<>();
             List<PluginEvidence> evidence = analyzer.analyze(session);
             List<ResolvedArtifact> universe = recorder.distinctArtifacts();
 
@@ -102,9 +99,7 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
                     .map(ResolvedArtifact::coordinates)
                     .distinct()
                     .toList();
-            List<GrayZoneArtifact> grayZone = grayZone(universe, projectFiles);
-            reportWriter.write(
-                    config.reportPath(), evidence, observedArtifacts, grayZone, warnings);
+            reportWriter.write(config.reportPath(), evidence, observedArtifacts);
 
             LOGGER.info("repo-provenance: wrote project manifest to {} and implicit manifest to {} "
                     + "({} PROJECT / {} IMPLICIT of {} observed artifacts)",
@@ -114,21 +109,6 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
             // Never fail the build because of this observational extension.
             LOGGER.warn("repo-provenance: failed to produce outputs, build is unaffected", e);
         }
-    }
-
-    /** Identifies dynamically-resolved test providers and records how they were classified (§8). */
-    private static List<GrayZoneArtifact> grayZone(
-            List<ResolvedArtifact> universe, Set<String> projectFiles) {
-        return universe.stream()
-                .filter(a -> GrayZoneDetector.isDynamicTestProvider(a.groupId(), a.artifactId()))
-                .map(a -> new GrayZoneArtifact(
-                        a.coordinates(),
-                        a.file() != null && projectFiles.contains(a.file().getAbsolutePath())
-                                ? Provenance.PROJECT
-                                : Provenance.IMPLICIT,
-                        "surefire/failsafe provider resolved dynamically by an implicit plugin"))
-                .distinct()
-                .toList();
     }
 }
 

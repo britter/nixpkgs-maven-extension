@@ -78,19 +78,6 @@ final class ProvenanceReport {
         return result;
     }
 
-    /**
-     * Returns the provenance recorded in {@code grayZoneArtifacts} for the first entry whose
-     * coordinates contain {@code coordinatesSubstring}, or {@code null} if none.
-     */
-    String grayZoneProvenanceOf(String coordinatesSubstring) {
-        Pattern pattern = Pattern.compile(
-                "\"coordinates\"\\s*:\\s*\"[^\"]*" + Pattern.quote(coordinatesSubstring)
-                        + "[^\"]*\".*?\"provenance\"\\s*:\\s*\"(\\w+)\"",
-                Pattern.DOTALL);
-        Matcher matcher = pattern.matcher(json);
-        return matcher.find() ? matcher.group(1) : null;
-    }
-
     String raw() {
         return json;
     }

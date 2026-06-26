@@ -77,7 +77,7 @@ Written once at the end of the build, at the reactor execution root:
 | --- | --- |
 | `target/repo-provenance.json` | The **project manifest** — the canonical, Maven-version-independent PROJECT set. Validates against [`docs/manifest.schema.json`](docs/manifest.schema.json). |
 | `target/repo-provenance-implicit.json` | The **implicit manifest** — the IMPLICIT (Maven-determined) set, in the same shape and schema. Canonically sorted but Maven-version-specific. |
-| `target/repo-provenance-report.json` | A **diagnostics report** — Maven-specific, *not* part of the deterministic contract. Carries warnings, per-plugin/extension provenance evidence, and surfaced gray-zone artifacts (e.g. the surefire test provider). |
+| `target/repo-provenance-report.json` | A **diagnostics report** — Maven-specific, *not* part of the deterministic contract. Carries warnings, per-plugin/extension provenance evidence, and the full set of observed artifacts. |
 
 In a multi-module build each manifest is the deduplicated union over all modules — **one aggregated
 file** of each kind, never one per module. The project and implicit manifests are disjoint (a file

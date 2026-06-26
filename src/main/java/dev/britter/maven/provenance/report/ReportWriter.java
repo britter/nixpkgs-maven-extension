@@ -39,22 +39,19 @@ public final class ReportWriter {
     public void write(
             Path reportPath,
             List<PluginEvidence> evidence,
-            List<String> observedArtifacts,
-            List<GrayZoneArtifact> grayZone,
-            List<String> warnings)
+            List<String> observedArtifacts)
             throws IOException {
-        String json = JsonWriter.write(buildDocument(evidence, observedArtifacts, grayZone, warnings));
+        String json = JsonWriter.write(buildDocument(evidence, observedArtifacts));
         Files.createDirectories(reportPath.getParent());
         Files.writeString(reportPath, json, StandardCharsets.UTF_8);
     }
 
     private Map<String, Object> buildDocument(
             List<PluginEvidence> evidence,
-            List<String> observedArtifacts,
-            List<GrayZoneArtifact> grayZone,
-            List<String> warnings) {
+            List<String> observedArtifacts) {
         Map<String, Object> doc = new LinkedHashMap<>();
-        doc.put("warnings", new ArrayList<>(warnings));
+        // Reserved by the schema; UNKNOWN-provenance warnings are not yet wired.
+        doc.put("warnings", new ArrayList<>());
         List<Object> plugins = new ArrayList<>();
         for (PluginEvidence e : evidence) {
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -67,17 +64,6 @@ public final class ReportWriter {
             plugins.add(entry);
         }
         doc.put("pluginProvenance", plugins);
-        // Dynamically resolved plugin dependencies (e.g. the surefire provider), surfaced distinctly
-        // so consumers can decide how to supply them (design §8).
-        List<Object> gray = new ArrayList<>();
-        for (GrayZoneArtifact g : grayZone) {
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("coordinates", g.coordinates());
-            entry.put("provenance", g.provenance().name());
-            entry.put("reason", g.reason());
-            gray.add(entry);
-        }
-        doc.put("grayZoneArtifacts", gray);
         // Maven-specific diagnostics: the full set of artifacts observed hitting the local
         // repository, sorted so it is independent of (parallel) resolution order.
         doc.put("observedArtifacts", new ArrayList<>(observedArtifacts));
