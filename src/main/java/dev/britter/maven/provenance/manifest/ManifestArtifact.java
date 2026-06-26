@@ -20,7 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * One entry of the manifest's {@code projectArtifacts}: an artifact identified by full coordinates,
+ * One entry of a manifest's {@code artifacts} array: an artifact identified by full coordinates,
  * with the repository-relative files that belong to it (design §6.2, {@code manifest.schema.json}).
  *
  * @param groupId    artifact groupId
@@ -39,7 +39,7 @@ public record ManifestArtifact(
         List<String> files) {
 
     /**
-     * Canonical ordering for {@code projectArtifacts}: by
+     * Canonical ordering for the {@code artifacts} array: by
      * {@code (groupId, artifactId, version, type, classifier)} (design §6.2). A missing classifier
      * sorts before any present one.
      */

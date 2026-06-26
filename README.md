@@ -10,11 +10,18 @@ classifies each artifact as either:
   plugins, the super-POM's `pluginManagement`, and everything reachable only through those plugins'
   realms). This set changes from one Maven distribution to another.
 
-The extension emits a single canonical JSON **manifest** describing the PROJECT set. Everything in
-the local repository that is *not* in the manifest is IMPLICIT by definition. Because the manifest
-lists only the PROJECT set, it is **byte-identical across Maven versions** — which is the whole
-point: a downstream system (e.g. a Nix packaging pipeline) can rely on a stable, Maven-independent
-description of what a project actually determines, and supply the volatile implicit set separately.
+The extension emits **two canonical JSON manifests** of identical shape, distinguished by file name:
+
+- the **project manifest** (`repo-provenance.json`) — the PROJECT set. Because it lists only what the
+  project's POMs determine, it is **byte-identical across Maven versions**.
+- the **implicit manifest** (`repo-provenance-implicit.json`) — the IMPLICIT (Maven-determined) set.
+  It is canonically sorted but **Maven-version-specific** by nature.
+
+Together they are a lossless, disjoint partition of everything the build wrote to the local
+repository (minus volatile metadata). A downstream system (e.g. a Nix packaging pipeline) consumes a
+real package build via its *project* manifest (a stable, Maven-independent dependency set), and a
+dedicated probe build via its *implicit* manifest (to assemble the per-Maven-version shared implicit
+repository).
 
 The extension is **strictly observational**: it never changes resolution results or build output,
 and never fails the build. If it cannot classify something confidently it records a warning in the
@@ -68,11 +75,13 @@ Written once at the end of the build, at the reactor execution root:
 
 | File | Description |
 | --- | --- |
-| `target/repo-provenance.json` | The **manifest** — the canonical, Maven-version-independent PROJECT set. Validates against [`docs/manifest.schema.json`](docs/manifest.schema.json). |
+| `target/repo-provenance.json` | The **project manifest** — the canonical, Maven-version-independent PROJECT set. Validates against [`docs/manifest.schema.json`](docs/manifest.schema.json). |
+| `target/repo-provenance-implicit.json` | The **implicit manifest** — the IMPLICIT (Maven-determined) set, in the same shape and schema. Canonically sorted but Maven-version-specific. |
 | `target/repo-provenance-report.json` | A **diagnostics report** — Maven-specific, *not* part of the deterministic contract. Carries warnings, per-plugin/extension provenance evidence, and surfaced gray-zone artifacts (e.g. the surefire test provider). |
 
-In a multi-module build the manifest is the deduplicated union over all modules — **one aggregated
-file**, never one per module.
+In a multi-module build each manifest is the deduplicated union over all modules — **one aggregated
+file** of each kind, never one per module. The project and implicit manifests are disjoint (a file
+is in at most one).
 
 ## Configuration
 
@@ -80,7 +89,8 @@ System properties (all optional):
 
 | Property | Default | Description |
 | --- | --- | --- |
-| `repoprovenance.output` | `<execution-root>/target/repo-provenance.json` | Absolute path for the manifest. |
+| `repoprovenance.output` | `<execution-root>/target/repo-provenance.json` | Absolute path for the project manifest. |
+| `repoprovenance.implicitOutput` | `<execution-root>/target/repo-provenance-implicit.json` | Absolute path for the implicit manifest. |
 | `repoprovenance.report` | `<execution-root>/target/repo-provenance-report.json` | Absolute path for the diagnostics report. |
 
 ## How classification works
