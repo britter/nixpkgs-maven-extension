@@ -16,9 +16,11 @@
 
 package dev.britter.maven.provenance;
 
+import java.io.File;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.inject.Named;
@@ -47,11 +49,28 @@ public class ResolutionRecorder {
     // Keyed by absolute file path so repeated resolutions of the same file collapse to one entry.
     private final Map<String, ResolvedArtifact> artifacts = new ConcurrentHashMap<>();
 
+    // Absolute paths of files resolved as part of a project-dependency resolution (any scope). A
+    // file resolved as a project dependency in any event lands here, so PROJECT precedence over a
+    // shared plugin resolution is automatic (set union, design §5.2).
+    private final Set<String> projectDependencyFiles = ConcurrentHashMap.newKeySet();
+
     /** Records a single artifact resolution. Safe to call from any thread. */
     public void recordArtifact(ResolvedArtifact artifact) {
         if (artifact.file() != null) {
             artifacts.putIfAbsent(artifact.file().getAbsolutePath(), artifact);
         }
+    }
+
+    /** Records that a file was resolved as a project dependency. Safe to call from any thread. */
+    public void recordProjectDependencyFile(File file) {
+        if (file != null) {
+            projectDependencyFiles.add(file.getAbsolutePath());
+        }
+    }
+
+    /** Absolute paths of every file observed being resolved as a project dependency. */
+    public Set<String> projectDependencyFiles() {
+        return Set.copyOf(projectDependencyFiles);
     }
 
     /**

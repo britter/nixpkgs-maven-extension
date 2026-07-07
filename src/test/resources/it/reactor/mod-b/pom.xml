@@ -18,5 +18,12 @@
       <artifactId>mod-a</artifactId>
       <version>1.0</version>
     </dependency>
+    <!-- A test-scope-only dependency: its closure must be PROJECT, not IMPLICIT (issue #1). -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.10.2</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 </project>

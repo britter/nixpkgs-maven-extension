@@ -56,16 +56,25 @@ public final class ReactorInspector {
      * Computes the set of absolute file paths reachable from any PROJECT root across all reactor
      * modules.
      *
-     * @param session   the build session
-     * @param evidence  the per-plugin provenance evidence (used to pick PROJECT plugins)
-     * @param universe  every artifact observed hitting the local repository (used to map
-     *                  project-declared plugin dependency coordinates back to their files)
+     * @param session                the build session
+     * @param evidence                the per-plugin provenance evidence (used to pick PROJECT plugins)
+     * @param universe                every artifact observed hitting the local repository (used to
+     *                                map project-declared plugin dependency coordinates back to files)
+     * @param projectDependencyFiles  absolute paths of files observed being resolved as project
+     *                                dependencies (all scopes), from the resolution events
      */
     public Set<String> collectProjectFiles(
-            MavenSession session, List<PluginEvidence> evidence, List<ResolvedArtifact> universe) {
+            MavenSession session, List<PluginEvidence> evidence, List<ResolvedArtifact> universe,
+            Set<String> projectDependencyFiles) {
         Set<String> projectFiles = new HashSet<>();
 
-        // 1. Project dependency closures (all scopes the build resolved), across every module.
+        // 1. Project dependency closures across every module. The primary source is the resolution
+        //    events attributed to project-dependency resolution, which cover every scope (test
+        //    included, unlike MavenProject.getArtifacts() whose scope filter is reset to runtime by
+        //    a later package-phase mojo — issue #1). getArtifacts() is kept as a complementary
+        //    signal; the union only ever adds real project deps.
+        // ponytail: keep getArtifacts() too — union only adds real project deps, covers null-trace edge.
+        projectFiles.addAll(projectDependencyFiles);
         for (MavenProject project : session.getAllProjects()) {
             for (Artifact artifact : project.getArtifacts()) {
                 addFile(projectFiles, artifact.getFile());

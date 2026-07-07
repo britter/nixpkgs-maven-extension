@@ -312,8 +312,11 @@ long as the contract in §1–§11 holds.
 - Cross-check against the known default-plugin set if a second signal is wanted.
 
 **Computing the roots (§5.2)**
-- Project dependency closure: `MavenProject.getArtifacts()` after resolution, and/or the
-  `DependencyResolutionResult`.
+- Project dependency closure: taken from the resolution events attributed (via `RequestTrace`,
+  above) to project-dependency resolution, which cover every scope — `test` included.
+  `MavenProject.getArtifacts()` is a supplementary signal only: its scope filter is reset to
+  `runtime` by a later package-phase mojo (maven-jar-plugin), so on its own it drops the
+  test-scope closure.
 - Plugin realms: `org.apache.maven.plugin.MavenPluginManager` /
   `PluginDependenciesResolver`; a plugin's `ClassRealm.getURLs()` maps realm entries to
   local-repository files.

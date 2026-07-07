@@ -23,7 +23,9 @@ import javax.inject.Singleton;
 import java.io.File;
 
 import org.apache.maven.eventspy.AbstractEventSpy;
+import org.apache.maven.project.DependencyResolutionRequest;
 import org.eclipse.aether.RepositoryEvent;
+import org.eclipse.aether.RequestTrace;
 import org.eclipse.aether.artifact.Artifact;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,5 +90,26 @@ public class ProvenanceEventSpy extends AbstractEventSpy {
                 artifact.getExtension(),
                 classifier == null || classifier.isEmpty() ? null : classifier,
                 file));
+
+        // Attribute the resolution to its trigger so project dependencies (all scopes, incl. test)
+        // are captured as PROJECT roots independently of MavenProject.getArtifacts()'s scope filter.
+        if (isProjectDependencyResolution(event.getTrace())) {
+            recorder.recordProjectDependencyFile(file);
+        }
+    }
+
+    /**
+     * True if this resolution was triggered by project dependency resolution rather than plugin
+     * resolution. Maven roots the {@link RequestTrace} with a {@link DependencyResolutionRequest}
+     * for project dependencies and with an {@code org.apache.maven.model.Plugin} for plugins; the
+     * root's data type is the stable discriminator across Maven 3.9.x (design §"attribute each
+     * resolution"). A null or third-party trace is unattributed and treated as not-project.
+     */
+    private static boolean isProjectDependencyResolution(RequestTrace trace) {
+        Object rootData = null;
+        for (RequestTrace node = trace; node != null; node = node.getParent()) {
+            rootData = node.getData();
+        }
+        return rootData instanceof DependencyResolutionRequest;
     }
 }
