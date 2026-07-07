@@ -74,7 +74,7 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
             Path localRepoBase = Paths.get(session.getLocalRepository().getBasedir());
             Set<String> projectFiles = new ReactorInspector(container)
                     .collectProjectFiles(session, evidence, universe,
-                            recorder.projectDependencyFiles());
+                            recorder.projectDependencyFiles(), recorder.pluginResolutionFiles());
             List<ResolvedArtifact> projectArtifacts =
                     Classifier.projectArtifacts(universe, projectFiles);
 

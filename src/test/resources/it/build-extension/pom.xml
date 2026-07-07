@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>dev.britter.it</groupId>
+  <artifactId>build-extension</artifactId>
+  <version>1.0</version>
+  <packaging>jar</packaging>
+
+  <!-- Declares a build extension (PROJECT provenance): a <plugin> with
+       <extensions>true</extensions>. Maven registers it under a realm id prefixed
+       "extension>" rather than "plugin>". Its own jar must be PROJECT so the offline
+       build can load the extension (issue #3, repro 2). -->
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>17</maven.compiler.release>
+  </properties>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.sonatype.plugins</groupId>
+        <artifactId>nexus-staging-maven-plugin</artifactId>
+        <version>1.6.13</version>
+        <extensions>true</extensions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

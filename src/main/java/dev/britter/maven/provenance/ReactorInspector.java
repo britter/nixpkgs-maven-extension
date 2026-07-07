@@ -21,6 +21,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -39,12 +40,12 @@ import org.codehaus.plexus.classworlds.realm.ClassRealm;
  *
  * <p>Realm membership is read from the live {@code ClassWorld} rather than by re-resolving plugins,
  * so this introduces no new resolution and no side effects — it only observes realms Maven already
- * built. Plugin realms are named {@code plugin>groupId:artifactId:version} (verified against Maven
- * 3.9.x).
+ * built. Plugin realms are named {@code plugin>groupId:artifactId:version} and build-extension
+ * realms {@code extension>groupId:artifactId:version} (verified against Maven 3.9.x).
  */
 public final class ReactorInspector {
 
-    private static final String PLUGIN_REALM_PREFIX = "plugin>";
+    private static final List<String> REALM_PREFIXES = List.of("plugin>", "extension>");
 
     private final PlexusContainer container;
 
@@ -62,10 +63,12 @@ public final class ReactorInspector {
      *                                map project-declared plugin dependency coordinates back to files)
      * @param projectDependencyFiles  absolute paths of files observed being resolved as project
      *                                dependencies (all scopes), from the resolution events
+     * @param pluginResolutionFiles   absolute paths of files observed being resolved under each
+     *                                plugin, keyed by plugin GAV, from the resolution events
      */
     public Set<String> collectProjectFiles(
             MavenSession session, List<PluginEvidence> evidence, List<ResolvedArtifact> universe,
-            Set<String> projectDependencyFiles) {
+            Set<String> projectDependencyFiles, Map<String, Set<String>> pluginResolutionFiles) {
         Set<String> projectFiles = new HashSet<>();
 
         // 1. Project dependency closures across every module. The primary source is the resolution
@@ -81,17 +84,32 @@ public final class ReactorInspector {
             }
         }
 
-        // 2. Realm closures of PROJECT plugins/extensions.
+        // 2. Full resolution closures of PROJECT plugins/extensions. The realm alone omits
+        //    transitive artifacts Maven reads while resolving the plugin but mediates out of the
+        //    final realm; the offline build still needs those to resolve the plugin (issue #3). So
+        //    we take the union of (a) the realm URLs — covering plugin> and extension> realms — and
+        //    (b) every file observed resolving under the plugin's GAV (the mediated-out closure).
         Set<String> projectPluginGavs = evidence.stream()
                 .filter(e -> e.provenance() == Provenance.PROJECT)
                 .map(e -> e.key() + ":" + e.version())
                 .collect(Collectors.toSet());
+        for (String gav : projectPluginGavs) {
+            Set<String> closure = pluginResolutionFiles.get(gav);
+            if (closure != null) {
+                projectFiles.addAll(closure);
+            }
+        }
         for (ClassRealm realm : realms()) {
             String id = realm.getId();
-            if (id != null && id.startsWith(PLUGIN_REALM_PREFIX)
-                    && projectPluginGavs.contains(id.substring(PLUGIN_REALM_PREFIX.length()))) {
-                for (URL url : realm.getURLs()) {
-                    addFile(projectFiles, toFile(url));
+            if (id == null) {
+                continue;
+            }
+            for (String prefix : REALM_PREFIXES) {
+                if (id.startsWith(prefix)
+                        && projectPluginGavs.contains(id.substring(prefix.length()))) {
+                    for (URL url : realm.getURLs()) {
+                        addFile(projectFiles, toFile(url));
+                    }
                 }
             }
         }

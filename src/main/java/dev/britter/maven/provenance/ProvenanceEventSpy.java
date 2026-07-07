@@ -23,6 +23,8 @@ import javax.inject.Singleton;
 import java.io.File;
 
 import org.apache.maven.eventspy.AbstractEventSpy;
+import org.apache.maven.model.Plugin;
+import org.apache.maven.model.building.ModelBuildingRequest;
 import org.apache.maven.project.DependencyResolutionRequest;
 import org.eclipse.aether.RepositoryEvent;
 import org.eclipse.aether.RequestTrace;
@@ -91,25 +93,51 @@ public class ProvenanceEventSpy extends AbstractEventSpy {
                 classifier == null || classifier.isEmpty() ? null : classifier,
                 file));
 
-        // Attribute the resolution to its trigger so project dependencies (all scopes, incl. test)
-        // are captured as PROJECT roots independently of MavenProject.getArtifacts()'s scope filter.
-        if (isProjectDependencyResolution(event.getTrace())) {
+        // Attribute the resolution to its trigger. Maven roots the RequestTrace with a
+        // DependencyResolutionRequest for project dependencies (all scopes, incl. test — captured
+        // as PROJECT roots independently of MavenProject.getArtifacts()'s scope filter) and with an
+        // org.apache.maven.model.Plugin for plugin/extension resolution. For plugins we record the
+        // file under the plugin's GAV so the session-end classification can keep the full
+        // resolution closure of PROJECT plugins/extensions — including transitive artifacts
+        // mediated out of the realm and build-extension realms (issue #3).
+        RequestTrace trace = event.getTrace();
+        Object rootData = rootData(trace);
+        if (rootData instanceof DependencyResolutionRequest) {
             recorder.recordProjectDependencyFile(file);
+        } else if (rootData instanceof Plugin plugin && !isModelBuildingResolution(trace)) {
+            // Skip model-building resolutions: those read a POM (an imported BOM or a parent) to
+            // build a model, not the plugin's own realm artifacts. Which plugin's dependency
+            // collection first triggers such a shared POM read varies across Maven versions, so
+            // attributing them would make the project manifest version-dependent and break the
+            // byte-identical invariant (design §2/§9.2). The plugin's own realm closure — jars and
+            // their descriptor POMs, including transitives mediated out of the realm (issue #3) —
+            // is resolved without a model-building request and is captured here.
+            recorder.recordPluginResolutionFile(
+                    plugin.getGroupId() + ":" + plugin.getArtifactId() + ":" + plugin.getVersion(),
+                    file);
         }
     }
 
     /**
-     * True if this resolution was triggered by project dependency resolution rather than plugin
-     * resolution. Maven roots the {@link RequestTrace} with a {@link DependencyResolutionRequest}
-     * for project dependencies and with an {@code org.apache.maven.model.Plugin} for plugins; the
-     * root's data type is the stable discriminator across Maven 3.9.x (design §"attribute each
-     * resolution"). A null or third-party trace is unattributed and treated as not-project.
+     * The data of the {@link RequestTrace} root — the stable discriminator of what triggered a
+     * resolution across Maven 3.9.x (design §"attribute each resolution"). A null or third-party
+     * trace root is unattributed.
      */
-    private static boolean isProjectDependencyResolution(RequestTrace trace) {
+    private static Object rootData(RequestTrace trace) {
         Object rootData = null;
         for (RequestTrace node = trace; node != null; node = node.getParent()) {
             rootData = node.getData();
         }
-        return rootData instanceof DependencyResolutionRequest;
+        return rootData;
+    }
+
+    /** True if any node in the trace is a model-building request (a POM read to build a model). */
+    private static boolean isModelBuildingResolution(RequestTrace trace) {
+        for (RequestTrace node = trace; node != null; node = node.getParent()) {
+            if (node.getData() instanceof ModelBuildingRequest) {
+                return true;
+            }
+        }
+        return false;
     }
 }

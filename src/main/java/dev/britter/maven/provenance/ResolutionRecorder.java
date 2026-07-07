@@ -18,6 +18,7 @@ package dev.britter.maven.provenance;
 
 import java.io.File;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,6 +55,12 @@ public class ResolutionRecorder {
     // shared plugin resolution is automatic (set union, design §5.2).
     private final Set<String> projectDependencyFiles = ConcurrentHashMap.newKeySet();
 
+    // Absolute paths of files resolved under a plugin's resolution, keyed by the plugin's GAV
+    // (groupId:artifactId:version) from the RequestTrace root. Plugin provenance is only known at
+    // session end, so we capture every plugin-rooted resolution here and let the session-end
+    // classification keep the closures of the PROJECT plugins (issue #3).
+    private final Map<String, Set<String>> pluginResolutionFiles = new ConcurrentHashMap<>();
+
     /** Records a single artifact resolution. Safe to call from any thread. */
     public void recordArtifact(ResolvedArtifact artifact) {
         if (artifact.file() != null) {
@@ -71,6 +78,22 @@ public class ResolutionRecorder {
     /** Absolute paths of every file observed being resolved as a project dependency. */
     public Set<String> projectDependencyFiles() {
         return Set.copyOf(projectDependencyFiles);
+    }
+
+    /** Records that a file was resolved under the given plugin's resolution. Safe from any thread. */
+    public void recordPluginResolutionFile(String pluginGav, File file) {
+        if (file != null) {
+            pluginResolutionFiles
+                    .computeIfAbsent(pluginGav, k -> ConcurrentHashMap.newKeySet())
+                    .add(file.getAbsolutePath());
+        }
+    }
+
+    /** Absolute paths of files observed being resolved under each plugin, keyed by plugin GAV. */
+    public Map<String, Set<String>> pluginResolutionFiles() {
+        Map<String, Set<String>> copy = new HashMap<>();
+        pluginResolutionFiles.forEach((gav, files) -> copy.put(gav, Set.copyOf(files)));
+        return copy;
     }
 
     /**

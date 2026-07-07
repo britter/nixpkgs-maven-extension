@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>dev.britter.it</groupId>
+  <artifactId>plugin-closure</artifactId>
+  <version>1.0</version>
+  <packaging>jar</packaging>
+
+  <!-- Declares an old plugin (PROJECT provenance) whose resolution pulls transitive
+       artifacts that are mediated OUT of its final realm (maven-project:3.0-alpha-2,
+       maven-plugin-api:3.0.1). Those must still be PROJECT so the offline build can
+       resolve the plugin (issue #3, repro 1). -->
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>17</maven.compiler.release>
+  </properties>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>com.mycila.maven-license-plugin</groupId>
+        <artifactId>maven-license-plugin</artifactId>
+        <version>1.10.b1</version>
+        <configuration>
+          <header>header.txt</header>
+          <quiet>true</quiet>
+          <includes>
+            <include>src/**</include>
+          </includes>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>process-sources</phase>
+            <goals>
+              <goal>format</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
