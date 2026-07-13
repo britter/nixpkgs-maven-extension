@@ -82,12 +82,17 @@ reliable for the default-bound plugins.
 Compute two roots:
 
 - the project's **dependency closure** (all scopes the build uses), and
-- the **realm closure of each PROJECT plugin/extension**.
+- the **resolution closure of each PROJECT plugin/extension** — its realm (`plugin>` and
+  `extension>` realms) plus the transitive artifacts Maven reads while resolving the plugin
+  that are mediated out of the final realm, which the offline build still needs to resolve
+  the plugin (issue #3). Model-building POM reads (imported BOMs, parents) are excluded from
+  this closure: which plugin's collection first triggers a shared POM read varies across
+  Maven versions, so attributing them would break the byte-identical manifest invariant (§2).
 
 Then, for every artifact written to the local repository:
 
 - **PROJECT** if it is reachable from the project dependency closure **or** from any
-  PROJECT plugin's realm closure;
+  PROJECT plugin's resolution closure;
 - **IMPLICIT** otherwise (reachable only via IMPLICIT plugin realms, or pulled by Maven
   core infrastructure).
 
@@ -317,9 +322,11 @@ long as the contract in §1–§11 holds.
   `MavenProject.getArtifacts()` is a supplementary signal only: its scope filter is reset to
   `runtime` by a later package-phase mojo (maven-jar-plugin), so on its own it drops the
   test-scope closure.
-- Plugin realms: `org.apache.maven.plugin.MavenPluginManager` /
-  `PluginDependenciesResolver`; a plugin's `ClassRealm.getURLs()` maps realm entries to
-  local-repository files.
+- Plugin/extension resolution closures: the union of (a) the plugin's `ClassRealm.getURLs()`
+  for `plugin>` and `extension>` realms, and (b) every file observed resolving under the
+  plugin's GAV in the resolution events (its `RequestTrace` root is an
+  `org.apache.maven.model.Plugin`), which captures transitives mediated out of the realm.
+  Resolutions whose trace passes through a `ModelBuildingRequest` are excluded (see §5.2).
 
 **Determinism hygiene**
 - Sort the manifest; emit repository-relative POSIX paths; exclude `_remote.repositories`,

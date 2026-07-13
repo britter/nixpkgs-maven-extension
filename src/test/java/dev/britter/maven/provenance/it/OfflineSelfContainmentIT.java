@@ -19,14 +19,10 @@ package dev.britter.maven.provenance.it;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
-import java.util.stream.Stream;
 
 import io.takari.maven.testing.TestResources;
 import io.takari.maven.testing.executor.MavenRuntime;
@@ -90,7 +86,7 @@ public class OfflineSelfContainmentIT {
             Path combined = workspace.resolve("recombined-repo");
             Path projectRepo = workspace.resolve("project-repo");
             Path implicitRepo = workspace.resolve("implicit-repo");
-            partition(localRepo, projectFiles, projectRepo, implicitRepo, combined);
+            OfflineRepos.partition(localRepo, projectFiles, projectRepo, implicitRepo, combined);
 
             maven.forProject(basedir)
                     .withCliOption("-B")
@@ -99,54 +95,7 @@ public class OfflineSelfContainmentIT {
                     .execute("clean", "package")
                     .assertErrorFreeLog();
         } finally {
-            deleteRecursively(workspace);
+            OfflineRepos.deleteRecursively(workspace);
         }
-    }
-
-    /**
-     * Copies every file of {@code source} into the project repo or the implicit repo depending on
-     * whether the manifest lists it, and into the combined repo unconditionally. Proves the PROJECT
-     * set and its complement are a lossless partition usable offline.
-     */
-    private static void partition(
-            Path source, Set<String> projectFiles, Path projectRepo, Path implicitRepo, Path combined)
-            throws IOException {
-        try (Stream<Path> files = Files.walk(source)) {
-            List<Path> regular = files.filter(Files::isRegularFile).toList();
-            for (Path file : regular) {
-                String relative = posix(source.relativize(file));
-                copy(file, combined.resolve(relative));
-                if (projectFiles.contains(relative)) {
-                    copy(file, projectRepo.resolve(relative));
-                } else {
-                    copy(file, implicitRepo.resolve(relative));
-                }
-            }
-        }
-    }
-
-    private static void copy(Path from, Path to) throws IOException {
-        Files.createDirectories(to.getParent());
-        Files.copy(from, to);
-    }
-
-    private static void deleteRecursively(Path root) throws IOException {
-        if (!Files.exists(root)) {
-            return;
-        }
-        try (Stream<Path> paths = Files.walk(root)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
-        }
-    }
-
-    private static String posix(Path relative) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < relative.getNameCount(); i++) {
-            if (i > 0) {
-                sb.append('/');
-            }
-            sb.append(relative.getName(i));
-        }
-        return sb.toString();
     }
 }
