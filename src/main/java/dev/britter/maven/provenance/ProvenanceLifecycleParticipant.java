@@ -72,25 +72,34 @@ public class ProvenanceLifecycleParticipant extends AbstractMavenLifecyclePartic
             List<ResolvedArtifact> universe = recorder.distinctArtifacts();
 
             Path localRepoBase = Paths.get(session.getLocalRepository().getBasedir());
-            Set<String> projectFiles = new ReactorInspector(container)
+            ReactorInspector inspector = new ReactorInspector(container);
+            Set<String> projectFiles = inspector
                     .collectProjectFiles(session, evidence, universe,
                             recorder.projectDependencyFiles(), recorder.pluginResolutionFiles());
             List<ResolvedArtifact> projectArtifacts =
                     Classifier.projectArtifacts(universe, projectFiles);
 
-            // The IMPLICIT set is the rest of the observed universe. Because we observe what Maven
-            // actually resolved, this naturally includes the deep plugin-realm closure (design §6.3).
+            // The IMPLICIT set is the positive closure of the IMPLICIT (Maven-determined) roots plus
+            // everything else Maven resolved that the project does not explain. An artifact reachable
+            // from an implicit plugin realm belongs here even when it is also a project dependency —
+            // it is Maven-version-specific and needed to build that realm offline (issue #9) — so the
+            // complement is unioned with the implicit realm closure rather than used alone.
+            Set<String> implicitRealmFiles = inspector
+                    .collectImplicitRealmFiles(evidence, recorder.pluginResolutionFiles());
             Set<ResolvedArtifact> projectSet = new HashSet<>(projectArtifacts);
             List<ResolvedArtifact> implicitArtifacts = universe.stream()
-                    .filter(a -> !projectSet.contains(a))
+                    .filter(a -> !projectSet.contains(a)
+                            || (a.file() != null
+                            && implicitRealmFiles.contains(a.file().getAbsolutePath())))
                     .toList();
 
-            // Build the project manifest first; seed the implicit build with the project's claimed
-            // files so the two manifests are a disjoint partition with PROJECT precedence (design §6).
+            // Each manifest is self-contained for its own closures, so each build claims into its own
+            // set: a primary artifact shared between the two sets (reachable from a project root AND
+            // an implicit realm) must appear in both, not be subtracted from the implicit manifest
+            // (issue #9). The overlap is harmless for the downstream no-clobber merge (design §6).
             ManifestBuilder builder = new ManifestBuilder(localRepoBase);
-            Set<String> claimed = new HashSet<>();
-            List<ManifestArtifact> projectEntries = builder.build(projectArtifacts, claimed);
-            List<ManifestArtifact> implicitEntries = builder.build(implicitArtifacts, claimed);
+            List<ManifestArtifact> projectEntries = builder.build(projectArtifacts, new HashSet<>());
+            List<ManifestArtifact> implicitEntries = builder.build(implicitArtifacts, new HashSet<>());
 
             ReportConfig config = ReportConfig.from(session);
             manifestWriter.write(config.manifestPath(), projectEntries);

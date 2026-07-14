@@ -21,9 +21,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import io.takari.maven.testing.TestResources;
 import io.takari.maven.testing.executor.MavenRuntime;
@@ -86,20 +84,10 @@ public class TestScopeDependencyIT {
         File basedir = resources.getBasedir("reactor");
         maven.forProject(basedir).withCliOption("-B").execute("clean", "package").assertErrorFreeLog();
 
-        Manifest project = project(basedir);
-        Manifest implicit = implicit(basedir);
-        assertClosureIsProjectNotImplicit(project, implicit);
-
-        // The partition still holds for primary artifacts; only shared descriptor-closure POMs
-        // (parents, import BOMs — e.g. junit-bom, imported by both the project's JUnit and plexus)
-        // may appear in both manifests so each is self-contained for its own descriptor-read closure
-        // (design §6, issue #7). Any overlap must therefore be pom files or their checksum sidecars.
-        Set<String> overlap = new HashSet<>(project.allFiles());
-        overlap.retainAll(new HashSet<>(implicit.allFiles()));
-        for (String file : overlap) {
-            assertTrue("only descriptor-closure POMs may overlap the two manifests, not: " + file,
-                    file.contains(".pom"));
-        }
+        // Overlap between the two manifests is allowed for shared infrastructure (closure POMs,
+        // issue #7; primary jars in an implicit realm, issue #9); this test only asserts that the
+        // project's own test-scope closure is classified PROJECT and never leaks into the implicit set.
+        assertClosureIsProjectNotImplicit(project(basedir), implicit(basedir));
     }
 
     private void assertClosureIsProjectNotImplicit(Manifest project, Manifest implicit) {

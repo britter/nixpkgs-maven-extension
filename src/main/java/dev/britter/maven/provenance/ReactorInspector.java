@@ -93,26 +93,7 @@ public final class ReactorInspector {
                 .filter(e -> e.provenance() == Provenance.PROJECT)
                 .map(e -> e.key() + ":" + e.version())
                 .collect(Collectors.toSet());
-        for (String gav : projectPluginGavs) {
-            Set<String> closure = pluginResolutionFiles.get(gav);
-            if (closure != null) {
-                projectFiles.addAll(closure);
-            }
-        }
-        for (ClassRealm realm : realms()) {
-            String id = realm.getId();
-            if (id == null) {
-                continue;
-            }
-            for (String prefix : REALM_PREFIXES) {
-                if (id.startsWith(prefix)
-                        && projectPluginGavs.contains(id.substring(prefix.length()))) {
-                    for (URL url : realm.getURLs()) {
-                        addFile(projectFiles, toFile(url));
-                    }
-                }
-            }
-        }
+        projectFiles.addAll(realmClosureFiles(projectPluginGavs, pluginResolutionFiles));
 
         // Dynamically resolved test providers (the canonical §8 gray zone) are versioned with — and
         // selected by — the surefire/failsafe plugin, but live in no realm or trace we can follow.
@@ -153,6 +134,51 @@ public final class ReactorInspector {
         }
 
         return projectFiles;
+    }
+
+    /**
+     * Absolute file paths reachable from the IMPLICIT (Maven-determined) plugin/extension realms and
+     * their resolution closures. An artifact in one of these realms belongs in the implicit manifest
+     * even when it is also reachable from a project root (issue #9): it is genuinely
+     * Maven-version-specific and required to build that realm offline. Symmetric to step 2 of
+     * {@link #collectProjectFiles} but for IMPLICIT-provenance plugins.
+     */
+    public Set<String> collectImplicitRealmFiles(
+            List<PluginEvidence> evidence, Map<String, Set<String>> pluginResolutionFiles) {
+        Set<String> implicitPluginGavs = evidence.stream()
+                .filter(e -> e.provenance() == Provenance.IMPLICIT)
+                .map(e -> e.key() + ":" + e.version())
+                .collect(Collectors.toSet());
+        return realmClosureFiles(implicitPluginGavs, pluginResolutionFiles);
+    }
+
+    /**
+     * The union of (a) every file observed resolving under each given plugin GAV (the mediated-out
+     * resolution closure) and (b) the {@code plugin>}/{@code extension>} realm URLs of those GAVs.
+     */
+    private Set<String> realmClosureFiles(
+            Set<String> pluginGavs, Map<String, Set<String>> pluginResolutionFiles) {
+        Set<String> files = new HashSet<>();
+        for (String gav : pluginGavs) {
+            Set<String> closure = pluginResolutionFiles.get(gav);
+            if (closure != null) {
+                files.addAll(closure);
+            }
+        }
+        for (ClassRealm realm : realms()) {
+            String id = realm.getId();
+            if (id == null) {
+                continue;
+            }
+            for (String prefix : REALM_PREFIXES) {
+                if (id.startsWith(prefix) && pluginGavs.contains(id.substring(prefix.length()))) {
+                    for (URL url : realm.getURLs()) {
+                        addFile(files, toFile(url));
+                    }
+                }
+            }
+        }
+        return files;
     }
 
     @SuppressWarnings("unchecked")

@@ -39,9 +39,11 @@ import org.junit.runner.RunWith;
 
 /**
  * Partition correctness across both manifests (design §9.3, group D.14/D.15): the project and
- * implicit manifests are disjoint, together cover exactly the non-volatile files in the local
- * repository, list each file at most once, and never list a volatile resolution-state file. Uses an
- * isolated local repository so the manifests can be checked against the exact set of files produced.
+ * implicit manifests together cover exactly the non-volatile files in the local repository, list
+ * each file at most once, and never list a volatile resolution-state file. They may overlap on
+ * shared infrastructure (closure POMs, issue #7; primary jars in an implicit realm, issue #9), so
+ * disjointness is not asserted. Uses an isolated local repository so the manifests can be checked
+ * against the exact set of files produced.
  */
 @RunWith(MavenJUnitTestRunner.class)
 @MavenVersions({"3.9.6", "3.9.12"})
@@ -89,17 +91,11 @@ public class PartitionIT {
         Set<String> project = new HashSet<>(projectFiles);
         Set<String> implicit = new HashSet<>(implicitFiles);
 
-        // Primary artifacts partition cleanly; only shared descriptor-closure POMs (parents, import
-        // BOMs) may appear in both manifests so each is self-contained for its own descriptor-read
-        // closure (issue #7). Any overlap must therefore be pom files or their checksum sidecars — a
-        // jar in both manifests is still a partition failure.
-        Set<String> overlap = new HashSet<>(project);
-        overlap.retainAll(implicit);
-        for (String file : overlap) {
-            assertTrue("only descriptor-closure POMs may overlap the two manifests, not: " + file,
-                    file.contains(".pom"));
-        }
-
+        // The two manifests may overlap on shared infrastructure so each stays self-contained: a
+        // descriptor-closure POM (parent, import BOM — issue #7) or a primary artifact reachable from
+        // both a project root and an implicit plugin realm (issue #9). Overlap is therefore not
+        // asserted empty; the load-bearing guarantees below are that each manifest lists a file at
+        // most once (checked above) and that together they cover exactly the repository.
         Set<String> union = new HashSet<>(project);
         union.addAll(implicit);
 
