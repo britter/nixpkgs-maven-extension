@@ -51,6 +51,9 @@ import org.junit.runner.RunWith;
 public class SurefireProviderIT {
 
     private static final String PROVIDER = "org.apache.maven.surefire:surefire-junit-platform";
+    // The junit-platform provider's own dependency, resolved into the provider classloader beside it
+    // (issue #11). It must share the provider's classification, not split off to the other manifest.
+    private static final String PROVIDER_SUPPORT = "org.apache.maven.surefire:common-java5";
     private static final String LAUNCHER = "org.junit.platform:junit-platform-launcher";
 
     private static final Map<String, String> PROVIDER_VERSION = new ConcurrentHashMap<>();
@@ -112,6 +115,15 @@ public class SurefireProviderIT {
                 project(basedir).contains(PROVIDER));
         assertFalse("provider must not be implicit when surefire is pinned:\n" + implicit(basedir).raw(),
                 implicit(basedir).contains(PROVIDER));
+
+        // The provider's transitive closure must follow the provider, not split to IMPLICIT (#11):
+        // otherwise a pinned-version support lib exists in neither the FOD nor defaultPluginsRepo.
+        assertTrue("provider support lib should be PROJECT with surefire pinned:\n"
+                        + project(basedir).raw(),
+                project(basedir).contains(PROVIDER_SUPPORT));
+        assertFalse("provider support lib must not be implicit when surefire is pinned:\n"
+                        + implicit(basedir).raw(),
+                implicit(basedir).contains(PROVIDER_SUPPORT));
     }
 
     @Test
