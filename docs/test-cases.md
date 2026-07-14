@@ -59,10 +59,13 @@ stream and the manifest.
 9. **Artifact reachable only from an IMPLICIT realm → IMPLICIT.** A realm-only dependency
    of an unpinned default plugin, not used by the project or any pinned plugin. Expect:
    absent from the manifest.
-10. **Project dependency coinciding with an implicit-plugin realm dep → PROJECT.** The
-    project declares a dependency whose coordinates also appear in an implicit plugin's
-    realm. Expect: PROJECT (reachable from the project dependency closure), so it is not
-    dropped.
+10. **Project dependency coinciding with an implicit-plugin realm dep → PROJECT *and*
+    IMPLICIT.** The project declares a dependency (e.g. `org.slf4j:slf4j-api:1.7.36`) whose
+    coordinates also appear in an implicit plugin's realm (the default maven-resources-plugin
+    via maven-filtering). Expect: it is in the **project** manifest (reachable from the project
+    dependency closure) **and** in the **implicit** manifest (reachable from the implicit realm,
+    Maven-version-specific and needed to build that realm offline — issue #9). It must not be
+    dropped from either.
 
 ## C. Determinism across Maven versions (design §2, §9.2)
 
@@ -77,13 +80,14 @@ stream and the manifest.
 
 ## D. Partition correctness (design §9.3)
 
-14. **Exhaustive partition across both manifests.** After a build, every non-volatile file
+14. **Exhaustive coverage across both manifests.** After a build, every non-volatile file
     under the local repository is covered in **either** the project manifest **or** the
     implicit manifest, and each manifest lists a file at most once. Expect: the union equals
-    the repository's non-volatile files (none missing, none spurious). Primary artifacts are
-    disjoint between the two; the only files that may appear in both are shared
-    descriptor-closure POMs (parents, import BOMs — design §6, issue #7). A non-POM file in
-    both is a failure.
+    the repository's non-volatile files (none missing, none spurious). The two may overlap on
+    shared infrastructure — descriptor-closure POMs (parents, import BOMs — design §6,
+    issue #7) and primary jars reachable from an implicit plugin realm (issue #9) — so
+    disjointness is not asserted; anything reachable from only one set's roots stays in
+    exactly one manifest.
 15. **Metadata classification (design §5.3).** `maven-metadata-*.xml`, `_remote.repositories`,
     `*.lastUpdated`, `resolver-status.properties` are handled per the design (volatile →
     excluded). Expect: none of these volatile files appear in **either** manifest.

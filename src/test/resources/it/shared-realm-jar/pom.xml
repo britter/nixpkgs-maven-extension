@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>dev.britter.it</groupId>
+  <artifactId>shared-realm-jar</artifactId>
+  <version>1.0</version>
+  <!-- Plain jar pinning nothing, so the default (IMPLICIT) maven-resources-plugin runs and its realm
+       pulls org.slf4j:slf4j-api:1.7.36 (via maven-filtering). The project also declares that exact
+       artifact as a dependency, so slf4j-api:1.7.36 is reachable from BOTH a project root and an
+       implicit plugin realm — the shared-primary-jar case of issue #9. -->
+  <packaging>jar</packaging>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>17</maven.compiler.release>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>1.7.36</version>
+    </dependency>
+  </dependencies>
+</project>

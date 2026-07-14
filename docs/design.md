@@ -126,13 +126,21 @@ keeps the project manifest pure while still emitting the implicit set as a first
 output. `project ∪ implicit` equals the full set of artifacts the build wrote to the local
 repository (minus volatile metadata, §5.3).
 
-The two manifests are a clean partition of the **primary** artifacts (jars and their own
-`.pom`s). The one exception is **descriptor-closure POMs** — the parent lineage and
-import-scope BOM POMs added by §5.3: these are shared infrastructure that every manifest
-whose artifacts read a descriptor offline must carry, so a closure POM may appear in
-**both** manifests when both sets reference it. Each manifest is thus self-contained for
-its own descriptor-read closure, even though the two consume different project sets. This
-overlap is pom-only and harmless: the consumer merges the sets no-clobber.
+Each manifest is **self-contained** for its own closures, so the two may **overlap** on
+shared infrastructure rather than being a strict partition. An artifact appears in both
+manifests when it is reachable from both sets' roots:
+
+- **descriptor-closure POMs** — the parent lineage and import-scope BOM POMs added by §5.3,
+  which every manifest whose artifacts read a descriptor offline must carry (issue #7); and
+- **primary artifacts reachable from an implicit plugin realm** — a jar that is both a
+  project dependency and a dependency of an IMPLICIT plugin's realm is genuinely
+  Maven-version-specific and required to build that realm offline, so it belongs in the
+  implicit manifest even though it is also PROJECT (issue #9).
+
+The two still consume different project sets, and the overlap is harmless: the consumer
+merges the sets no-clobber. A primary artifact reachable from **neither** the other set's
+roots stays in exactly one manifest, so the sets are a clean partition away from this
+shared infrastructure.
 
 Both are produced by the same classification, so the two halves are consistent by
 construction; §6.3 describes how each is consumed.
@@ -154,8 +162,8 @@ construction; §6.3 describes how each is consumed.
   in the same invocation does not affect them.)
 - In a reactor each set is the **deduplicated union over all modules** (for the project
   set, an artifact that is PROJECT in any module is PROJECT — the reachability union of
-  §5.2 / §7.1). Each primary artifact appears at most once and in exactly one of the two
-  manifests; shared descriptor-closure POMs (§6) are the sole exception and may appear in both.
+  §5.2 / §7.1). Each artifact appears at most once **within** a manifest; shared
+  infrastructure (§6) may appear in both, everything else in exactly one.
 
 ### 6.2 Shared format
 
@@ -247,8 +255,9 @@ ones:
 2. **Determinism:** build the same project on two different Maven 3.9.x releases; the
    manifest must be **byte-identical**.
 3. **Partition correctness:** every file in the local repository is classified; PROJECT ∪
-   IMPLICIT covers the repo. Primary artifacts partition with no overlap; only shared
-   descriptor-closure POMs (§6) may appear in both manifests.
+   IMPLICIT covers the repo and each manifest lists a file at most once. The two may overlap
+   only on shared infrastructure (§6) — descriptor-closure POMs and primary artifacts
+   reachable from an implicit plugin realm; everything else is in exactly one manifest.
 4. **Pinned vs unpinned:** a project that pins `maven-compiler-plugin` → that plugin and
    its realm are PROJECT; the same project without the pin → IMPLICIT.
 5. **Offline self-containment of the PROJECT set:** the PROJECT files plus a
