@@ -31,14 +31,24 @@ public final class GrayZoneDetector {
     }
 
     /**
-     * True if the coordinates look like a surefire/failsafe provider that the test plugin resolves
-     * dynamically from the project's test dependencies.
+     * True if the coordinates look like a surefire/failsafe provider — or a support library from the
+     * provider's own dependency closure — that the test plugin resolves dynamically from the
+     * project's test dependencies.
+     *
+     * <p>The provider ({@code surefire-junit4}, {@code surefire-junit-platform}, {@code surefire-testng},
+     * ...) and its transitive {@code common-*} support libs ({@code common-junit4}, {@code common-java5},
+     * ...) are resolved together into the provider classloader, not the plugin realm, so they share one
+     * classification. Matching only the provider left its {@code common-*} closure to fall through to
+     * IMPLICIT, which strands the pinned version in neither the FOD nor the default-plugins repo (issue
+     * #11). Plugin-realm artifacts ({@code surefire-api}, {@code surefire-booter}, ...) are excluded here
+     * because the realm closure already captures them.
      */
     public static boolean isDynamicTestProvider(String groupId, String artifactId) {
         if (!"org.apache.maven.surefire".equals(groupId)) {
             return false;
         }
         return artifactId.startsWith("surefire-junit")
-                || artifactId.startsWith("surefire-testng");
+                || artifactId.startsWith("surefire-testng")
+                || artifactId.startsWith("common-");
     }
 }

@@ -35,6 +35,21 @@ public class GrayZoneDetectorTest {
     }
 
     @Test
+    public void recognisesProviderSupportLibraries() {
+        // The provider's own dependency closure is resolved into the provider classloader alongside
+        // it and shares its classification (issue #11). These common-* support libs must be flagged
+        // so a pinned surefire keeps them PROJECT rather than dropping them to IMPLICIT.
+        assertTrue(GrayZoneDetector.isDynamicTestProvider(
+                "org.apache.maven.surefire", "common-junit4"));
+        assertTrue(GrayZoneDetector.isDynamicTestProvider(
+                "org.apache.maven.surefire", "common-junit48"));
+        assertTrue(GrayZoneDetector.isDynamicTestProvider(
+                "org.apache.maven.surefire", "common-junit3"));
+        assertTrue(GrayZoneDetector.isDynamicTestProvider(
+                "org.apache.maven.surefire", "common-java5"));
+    }
+
+    @Test
     public void doesNotFlagOrdinaryArtifacts() {
         assertFalse(GrayZoneDetector.isDynamicTestProvider(
                 "org.apache.maven.surefire", "surefire-api"));
