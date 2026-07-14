@@ -55,6 +55,17 @@ public class ManifestBuilderTest {
         return new ResolvedArtifact("g", artifactId, "1", type, null, file);
     }
 
+    /** Writes a POM with the given XML body at {@code groupId/artifactId/version/...} and returns it. */
+    private File pomFile(String groupId, String artifactId, String version, String xml)
+            throws Exception {
+        Path dir = repo.getRoot().toPath().resolve(groupId.replace('.', '/'))
+                .resolve(artifactId).resolve(version);
+        Files.createDirectories(dir);
+        Path file = dir.resolve(artifactId + "-" + version + ".pom");
+        Files.writeString(file, xml);
+        return file.toFile();
+    }
+
     @Test
     public void foldsPomTypeArtifactIntoTheJarEntryListingThePomOnce() throws Exception {
         File jar = artifactFile("g", "a", "1", "jar");
@@ -83,6 +94,38 @@ public class ManifestBuilderTest {
 
         // The only file was claimed elsewhere, so the entry is dropped entirely.
         assertTrue("entry whose files are all claimed must be dropped", entries.isEmpty());
+    }
+
+    @Test
+    public void capturesImportScopeBomReferencedByAParentPom() throws Exception {
+        // com.ex:child:1 -> parent com.ex:par:1, which imports org.bom:the-bom:${bomVer} (=2).
+        // Mirrors the real plexus-xml -> plexus:18 -> junit-bom:${junit5Version} case (issue #5).
+        File childJar = artifactFile("com.ex", "child", "1", "jar");
+        pomFile("com.ex", "child", "1",
+                "<project><modelVersion>4.0.0</modelVersion>"
+                        + "<parent><groupId>com.ex</groupId><artifactId>par</artifactId>"
+                        + "<version>1</version></parent>"
+                        + "<artifactId>child</artifactId></project>");
+        pomFile("com.ex", "par", "1",
+                "<project><modelVersion>4.0.0</modelVersion>"
+                        + "<groupId>com.ex</groupId><artifactId>par</artifactId><version>1</version>"
+                        + "<properties><bomVer>2</bomVer></properties>"
+                        + "<dependencyManagement><dependencies><dependency>"
+                        + "<groupId>org.bom</groupId><artifactId>the-bom</artifactId>"
+                        + "<version>${bomVer}</version><type>pom</type><scope>import</scope>"
+                        + "</dependency></dependencies></dependencyManagement></project>");
+        pomFile("org.bom", "the-bom", "2",
+                "<project><modelVersion>4.0.0</modelVersion>"
+                        + "<groupId>org.bom</groupId><artifactId>the-bom</artifactId>"
+                        + "<version>2</version></project>");
+
+        List<ManifestArtifact> entries = new ManifestBuilder(repo.getRoot().toPath())
+                .build(List.of(new ResolvedArtifact("com.ex", "child", "1", "jar", null, childJar)),
+                        new HashSet<>());
+
+        List<String> allFiles = entries.stream().flatMap(e -> e.files().stream()).toList();
+        assertTrue("import-scope BOM referenced by the parent POM must be captured:\n" + allFiles,
+                allFiles.contains("org/bom/the-bom/2/the-bom-2.pom"));
     }
 
     @Test
