@@ -129,6 +129,45 @@ public class ManifestBuilderTest {
     }
 
     @Test
+    public void sharedClosurePomIsNotSubtractedFromTheSecondManifest() throws Exception {
+        // A PROJECT jar and an IMPLICIT jar each reference the same import-scope BOM in their
+        // descriptor closure (mirrors the real junit-bom shared by junit-jupiter and plexus:18,
+        // issue #7). The BOM POM is shared infrastructure: it must appear in BOTH manifests so each
+        // is self-contained for offline descriptor reads, not be claimed away by the project build.
+        File projJar = artifactFile("g", "proj", "1", "jar");
+        pomFile("g", "proj", "1", importsBom("proj"));
+        File implJar = artifactFile("g", "impl", "1", "jar");
+        pomFile("g", "impl", "1", importsBom("impl"));
+        pomFile("org.bom", "shared", "2",
+                "<project><modelVersion>4.0.0</modelVersion>"
+                        + "<groupId>org.bom</groupId><artifactId>shared</artifactId>"
+                        + "<version>2</version></project>");
+
+        ManifestBuilder builder = new ManifestBuilder(repo.getRoot().toPath());
+        Set<String> claimed = new HashSet<>();
+        List<ManifestArtifact> project = builder.build(
+                List.of(new ResolvedArtifact("g", "proj", "1", "jar", null, projJar)), claimed);
+        List<ManifestArtifact> implicit = builder.build(
+                List.of(new ResolvedArtifact("g", "impl", "1", "jar", null, implJar)), claimed);
+
+        String bomPom = "org/bom/shared/2/shared-2.pom";
+        assertTrue("shared closure BOM must be in the project manifest",
+                project.stream().flatMap(e -> e.files().stream()).toList().contains(bomPom));
+        assertTrue("shared closure BOM must survive in the implicit manifest (issue #7)",
+                implicit.stream().flatMap(e -> e.files().stream()).toList().contains(bomPom));
+    }
+
+    /** A minimal POM for {@code g:artifactId:1} that import-scopes {@code org.bom:shared:2}. */
+    private static String importsBom(String artifactId) {
+        return "<project><modelVersion>4.0.0</modelVersion>"
+                + "<groupId>g</groupId><artifactId>" + artifactId + "</artifactId><version>1</version>"
+                + "<dependencyManagement><dependencies><dependency>"
+                + "<groupId>org.bom</groupId><artifactId>shared</artifactId>"
+                + "<version>2</version><type>pom</type><scope>import</scope>"
+                + "</dependency></dependencies></dependencyManagement></project>";
+    }
+
+    @Test
     public void claimingMakesTwoBuildsDisjoint() throws Exception {
         File sharedJar = artifactFile("g", "shared", "1", "jar");
         File onlyImplicit = artifactFile("g", "impl", "1", "jar");

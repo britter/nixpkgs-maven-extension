@@ -87,6 +87,8 @@ public final class ManifestBuilder {
             Entry entry = entries.computeIfAbsent(key, k -> new Entry(
                     artifact.groupId(), artifact.artifactId(), artifact.version(),
                     artifact.type(), artifact.classifier()));
+            // A primary artifact overrides any earlier closure tagging of the same coordinate.
+            entry.closure = false;
 
             // The artifact's primary file plus its checksum sidecars.
             addWithSidecars(entry.files, artifact.file());
@@ -104,6 +106,7 @@ public final class ManifestBuilder {
         }
 
         List<ManifestArtifact> candidates = new ArrayList<>();
+        Set<String> closureKeys = new HashSet<>();
         for (Entry e : entries.values()) {
             if (e.files.isEmpty()) {
                 continue;
@@ -111,13 +114,29 @@ public final class ManifestBuilder {
             candidates.add(new ManifestArtifact(
                     e.groupId, e.artifactId, e.version, e.type, e.classifier,
                     e.files.stream().sorted().toList()));
+            if (e.closure) {
+                closureKeys.add(coordinateKey(e.groupId, e.artifactId, e.version, e.type, e.classifier));
+            }
         }
         candidates.sort(ManifestArtifact.CANONICAL_ORDER);
 
         // Claim files in canonical order: the first entry to reference a file keeps it; later
         // entries — and files already claimed by a previously built manifest — drop it.
+        //
+        // Descriptor-closure POMs (parents, import BOMs) are exempt: they are shared infrastructure
+        // that must be present in *every* manifest whose artifacts read a descriptor offline, so a
+        // closure POM claimed by an earlier manifest must still appear here (issue #7). They are
+        // emitted as-is and left out of claimedFiles; that overlap is harmless (no-clobber merge)
+        // and cannot duplicate a file within one manifest — each file belongs to one coordinate and
+        // each coordinate is one entry, primary or closure.
         List<ManifestArtifact> result = new ArrayList<>();
         for (ManifestArtifact candidate : candidates) {
+            String key = coordinateKey(candidate.groupId(), candidate.artifactId(),
+                    candidate.version(), candidate.type(), candidate.classifier());
+            if (closureKeys.contains(key)) {
+                result.add(candidate);
+                continue;
+            }
             List<String> kept = new ArrayList<>();
             for (String file : candidate.files()) {
                 if (claimedFiles.add(file)) {
@@ -158,6 +177,7 @@ public final class ManifestBuilder {
                 break;
             }
             Entry entry = new Entry(parent.groupId, parent.artifactId, parent.version, "pom", null);
+            entry.closure = true;
             addWithSidecars(entry.files, parentPom);
             entries.put(key, entry);
             Document parentDoc = parse(parentPom);
@@ -188,6 +208,7 @@ public final class ManifestBuilder {
                     continue;
                 }
                 Entry entry = new Entry(bom.groupId, bom.artifactId, bom.version, "pom", null);
+                entry.closure = true;
                 addWithSidecars(entry.files, bomPom);
                 entries.put(key, entry);
                 addDescriptorClosure(bomPom, entries);
@@ -373,6 +394,8 @@ public final class ManifestBuilder {
         final String type;
         final String classifier;
         final Set<String> files = new LinkedHashSet<>();
+        /** True for descriptor-closure POMs (parents, import BOMs); exempt from cross-manifest claiming. */
+        boolean closure;
 
         Entry(String groupId, String artifactId, String version, String type, String classifier) {
             this.groupId = groupId;

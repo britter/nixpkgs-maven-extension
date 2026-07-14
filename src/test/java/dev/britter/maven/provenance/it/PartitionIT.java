@@ -89,10 +89,16 @@ public class PartitionIT {
         Set<String> project = new HashSet<>(projectFiles);
         Set<String> implicit = new HashSet<>(implicitFiles);
 
-        // Disjoint: no file is in both manifests.
+        // Primary artifacts partition cleanly; only shared descriptor-closure POMs (parents, import
+        // BOMs) may appear in both manifests so each is self-contained for its own descriptor-read
+        // closure (issue #7). Any overlap must therefore be pom files or their checksum sidecars — a
+        // jar in both manifests is still a partition failure.
         Set<String> overlap = new HashSet<>(project);
         overlap.retainAll(implicit);
-        assertTrue("project and implicit manifests overlap: " + overlap, overlap.isEmpty());
+        for (String file : overlap) {
+            assertTrue("only descriptor-closure POMs may overlap the two manifests, not: " + file,
+                    file.contains(".pom"));
+        }
 
         Set<String> union = new HashSet<>(project);
         union.addAll(implicit);

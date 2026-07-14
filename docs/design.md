@@ -124,7 +124,15 @@ They are kept in separate files on purpose: mixing the implicit set into the pro
 manifest would make that file Maven-specific and destroy its determinism. Splitting them
 keeps the project manifest pure while still emitting the implicit set as a first-class
 output. `project ∪ implicit` equals the full set of artifacts the build wrote to the local
-repository (minus volatile metadata, §5.3); the two are disjoint.
+repository (minus volatile metadata, §5.3).
+
+The two manifests are a clean partition of the **primary** artifacts (jars and their own
+`.pom`s). The one exception is **descriptor-closure POMs** — the parent lineage and
+import-scope BOM POMs added by §5.3: these are shared infrastructure that every manifest
+whose artifacts read a descriptor offline must carry, so a closure POM may appear in
+**both** manifests when both sets reference it. Each manifest is thus self-contained for
+its own descriptor-read closure, even though the two consume different project sets. This
+overlap is pom-only and harmless: the consumer merges the sets no-clobber.
 
 Both are produced by the same classification, so the two halves are consistent by
 construction; §6.3 describes how each is consumed.
@@ -146,7 +154,8 @@ construction; §6.3 describes how each is consumed.
   in the same invocation does not affect them.)
 - In a reactor each set is the **deduplicated union over all modules** (for the project
   set, an artifact that is PROJECT in any module is PROJECT — the reachability union of
-  §5.2 / §7.1). Each artifact appears at most once and in exactly one of the two manifests.
+  §5.2 / §7.1). Each primary artifact appears at most once and in exactly one of the two
+  manifests; shared descriptor-closure POMs (§6) are the sole exception and may appear in both.
 
 ### 6.2 Shared format
 
@@ -237,8 +246,9 @@ ones:
    ones. If this signal isn't clean, the rest doesn't stand.
 2. **Determinism:** build the same project on two different Maven 3.9.x releases; the
    manifest must be **byte-identical**.
-3. **Partition correctness:** every file in the local repository is classified exactly
-   once; PROJECT ∪ IMPLICIT covers the repo with no overlap.
+3. **Partition correctness:** every file in the local repository is classified; PROJECT ∪
+   IMPLICIT covers the repo. Primary artifacts partition with no overlap; only shared
+   descriptor-closure POMs (§6) may appear in both manifests.
 4. **Pinned vs unpinned:** a project that pins `maven-compiler-plugin` → that plugin and
    its realm are PROJECT; the same project without the pin → IMPLICIT.
 5. **Offline self-containment of the PROJECT set:** the PROJECT files plus a
