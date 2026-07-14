@@ -90,10 +90,16 @@ public class TestScopeDependencyIT {
         Manifest implicit = implicit(basedir);
         assertClosureIsProjectNotImplicit(project, implicit);
 
-        // The partition still holds: no coordinate is claimed by both manifests.
+        // The partition still holds for primary artifacts; only shared descriptor-closure POMs
+        // (parents, import BOMs — e.g. junit-bom, imported by both the project's JUnit and plexus)
+        // may appear in both manifests so each is self-contained for its own descriptor-read closure
+        // (design §6, issue #7). Any overlap must therefore be pom files or their checksum sidecars.
         Set<String> overlap = new HashSet<>(project.allFiles());
         overlap.retainAll(new HashSet<>(implicit.allFiles()));
-        assertTrue("project and implicit manifests overlap: " + overlap, overlap.isEmpty());
+        for (String file : overlap) {
+            assertTrue("only descriptor-closure POMs may overlap the two manifests, not: " + file,
+                    file.contains(".pom"));
+        }
     }
 
     private void assertClosureIsProjectNotImplicit(Manifest project, Manifest implicit) {

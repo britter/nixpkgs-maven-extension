@@ -77,11 +77,13 @@ stream and the manifest.
 
 ## D. Partition correctness (design §9.3)
 
-14. **Exhaustive, disjoint partition across both manifests.** After a build, every
-    non-volatile file under the local repository is covered by exactly one entry's `files`
-    in **either** the project manifest **or** the implicit manifest. Expect: the two
-    manifests' file sets are disjoint, and their union equals the repository's non-volatile
-    files — no file in both, none missing.
+14. **Exhaustive partition across both manifests.** After a build, every non-volatile file
+    under the local repository is covered in **either** the project manifest **or** the
+    implicit manifest, and each manifest lists a file at most once. Expect: the union equals
+    the repository's non-volatile files (none missing, none spurious). Primary artifacts are
+    disjoint between the two; the only files that may appear in both are shared
+    descriptor-closure POMs (parents, import BOMs — design §6, issue #7). A non-POM file in
+    both is a failure.
 15. **Metadata classification (design §5.3).** `maven-metadata-*.xml`, `_remote.repositories`,
     `*.lastUpdated`, `resolver-status.properties` are handled per the design (volatile →
     excluded). Expect: none of these volatile files appear in **either** manifest.
